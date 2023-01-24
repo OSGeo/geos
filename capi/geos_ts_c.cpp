@@ -204,6 +204,8 @@ typedef struct GEOSContextHandle_HS {
     void* noticeData;
     GEOSMessageHandler errorMessageOld;
     GEOSMessageHandler_r errorMessageNew;
+    GEOSInterruptThreadCallback* interrupt_cb;
+    void* interrupt_cb_data;
     void* errorData;
     uint8_t WKBOutputDims;
     int WKBByteOrder;
@@ -218,6 +220,8 @@ typedef struct GEOSContextHandle_HS {
         noticeData(nullptr),
         errorMessageOld(nullptr),
         errorMessageNew(nullptr),
+        interrupt_cb(nullptr),
+        interrupt_cb_data(nullptr),
         errorData(nullptr),
         point2d(nullptr)
     {
@@ -273,6 +277,15 @@ typedef struct GEOSContextHandle_HS {
         errorData = userData;
 
         return f;
+    }
+
+    GEOSInterruptThreadCallback*
+    setInterruptHandler(GEOSInterruptThreadCallback* cb, void* userData)
+    {
+        auto old = interrupt_cb;
+        interrupt_cb = cb;
+        interrupt_cb_data = userData;
+        return old;
     }
 
     void
@@ -375,12 +388,37 @@ gstrdup(std::string const& str)
     return gstrdup_s(str.c_str(), str.size());
 }
 
+struct InterruptManager {
+    InterruptManager(GEOSContextHandle_t handle) :
+        cb(handle->interrupt_cb),
+        cb_data(handle->interrupt_cb_data) {
+        if (cb) {
+            geos::util::Interrupt::registerThreadCallback(cb, cb_data);
+        }
+    }
+
+    ~InterruptManager() {
+        if (cb != nullptr) {
+            geos::util::Interrupt::registerThreadCallback(nullptr, nullptr);
+        }
+    }
+
+    GEOSInterruptThreadCallback* cb;
+    void* cb_data;
+};
+
+struct NotInterruptible {
+    NotInterruptible(GEOSContextHandle_t handle) {
+        (void) handle;
+    }
+};
+
 } // namespace anonymous
 
 // Execute a lambda, using the given context handle to process errors.
 // Return errval on error.
 // Errval should be of the type returned by f, unless f returns a bool in which case we promote to char.
-template<typename F>
+template<typename InterruptManagerType=InterruptManager, typename F>
 inline auto execute(
         GEOSContextHandle_t extHandle,
         typename std::conditional<std::is_same<decltype(std::declval<F>()()),bool>::value,
@@ -396,6 +434,8 @@ inline auto execute(
         return errval;
     }
 
+    InterruptManagerType ic(handle);
+
     try {
         return f();
     } catch (const std::exception& e) {
@@ -409,7 +449,7 @@ inline auto execute(
 
 // Execute a lambda, using the given context handle to process errors.
 // Return nullptr on error.
-template<typename F, typename std::enable_if<!std::is_void<decltype(std::declval<F>()())>::value, std::nullptr_t>::type = nullptr>
+template<typename InterruptManagerType=InterruptManager, typename F, typename std::enable_if<!std::is_void<decltype(std::declval<F>()())>::value, std::nullptr_t>::type = nullptr>
 inline auto execute(GEOSContextHandle_t extHandle, F&& f) -> decltype(f()) {
     if (extHandle == nullptr) {
         return nullptr;
@@ -419,6 +459,8 @@ inline auto execute(GEOSContextHandle_t extHandle, F&& f) -> decltype(f()) {
     if (!handle->initialized) {
         return nullptr;
     }
+
+    InterruptManagerType ic(handle);
 
     try {
         return f();
@@ -433,9 +475,14 @@ inline auto execute(GEOSContextHandle_t extHandle, F&& f) -> decltype(f()) {
 
 // Execute a lambda, using the given context handle to process errors.
 // No return value.
-template<typename F, typename std::enable_if<std::is_void<decltype(std::declval<F>()())>::value, std::nullptr_t>::type = nullptr>
+template<typename InterruptManagerType=InterruptManager, typename F, typename std::enable_if<std::is_void<decltype(std::declval<F>()())>::value, std::nullptr_t>::type = nullptr>
 inline void execute(GEOSContextHandle_t extHandle, F&& f) {
     GEOSContextHandleInternal_t* handle = reinterpret_cast<GEOSContextHandleInternal_t*>(extHandle);
+
+    if (handle != nullptr) {
+        InterruptManagerType ic(handle);
+    }
+
     try {
         f();
     } catch (const std::exception& e) {
@@ -512,6 +559,17 @@ extern "C" {
         }
 
         return handle->setErrorHandler(ef, userData);
+    }
+
+    GEOSInterruptThreadCallback*
+    GEOSContext_setInterruptCallback_r(GEOSContextHandle_t extHandle, GEOSInterruptThreadCallback* cb, void* userData)
+    {
+        GEOSContextHandleInternal_t* handle = reinterpret_cast<GEOSContextHandleInternal_t*>(extHandle);
+        if(0 == handle->initialized) {
+            return nullptr;
+        }
+
+        return handle->setInterruptHandler(cb, userData);
     }
 
     void
@@ -879,7 +937,7 @@ extern "C" {
     int
     GEOSArea_r(GEOSContextHandle_t extHandle, const Geometry* g, double* area)
     {
-        return execute(extHandle, 0, [&]() {
+        return execute<NotInterruptible>(extHandle, 0, [&]() {
             *area = g->getArea();
             return 1;
         });
@@ -888,7 +946,7 @@ extern "C" {
     int
     GEOSLength_r(GEOSContextHandle_t extHandle, const Geometry* g, double* length)
     {
-        return execute(extHandle, 0, [&]() {
+        return execute<NotInterruptible>(extHandle, 0, [&]() {
             *length = g->getLength();
             return 1;
         });
@@ -1640,7 +1698,7 @@ extern "C" {
     int
     GEOSGetNumInteriorRings_r(GEOSContextHandle_t extHandle, const Geometry* g1)
     {
-        return execute(extHandle, -1, [&]() {
+        return execute<NotInterruptible>(extHandle, -1, [&]() {
             const Polygon* p = dynamic_cast<const Polygon*>(g1);
             if(!p) {
                 throw IllegalArgumentException("Argument is not a Polygon");
@@ -1654,7 +1712,7 @@ extern "C" {
     int
     GEOSGetNumGeometries_r(GEOSContextHandle_t extHandle, const Geometry* g1)
     {
-        return execute(extHandle, -1, [&]() {
+        return execute<NotInterruptible>(extHandle, -1, [&]() {
             return static_cast<int>(g1->getNumGeometries());
         });
     }
@@ -1667,7 +1725,7 @@ extern "C" {
     const Geometry*
     GEOSGetGeometryN_r(GEOSContextHandle_t extHandle, const Geometry* g1, int n)
     {
-        return execute(extHandle, [&]() {
+        return execute<NotInterruptible>(extHandle, [&]() {
             if(n < 0) {
                 throw IllegalArgumentException("Index must be non-negative.");
             }
@@ -1856,7 +1914,7 @@ extern "C" {
     const Geometry*
     GEOSGetExteriorRing_r(GEOSContextHandle_t extHandle, const Geometry* g1)
     {
-        return execute(extHandle, [&]() {
+        return execute<NotInterruptible>(extHandle, [&]() {
             const Polygon* p = dynamic_cast<const Polygon*>(g1);
             if(!p) {
                 throw IllegalArgumentException("Invalid argument (must be a Polygon)");
@@ -1872,7 +1930,7 @@ extern "C" {
     const Geometry*
     GEOSGetInteriorRingN_r(GEOSContextHandle_t extHandle, const Geometry* g1, int n)
     {
-        return execute(extHandle, [&]() {
+        return execute<NotInterruptible>(extHandle, [&]() {
             const Polygon* p = dynamic_cast<const Polygon*>(g1);
             if(!p) {
                 throw IllegalArgumentException("Invalid argument (must be a Polygon)");
@@ -2573,7 +2631,7 @@ extern "C" {
     GEOSCoordSeq_setOrdinate_r(GEOSContextHandle_t extHandle, CoordinateSequence* cs,
                                unsigned int idx, unsigned int dim, double val)
     {
-        return execute(extHandle, 0, [&]() {
+        return execute<NotInterruptible>(extHandle, 0, [&]() {
             cs->setOrdinate(idx, dim, val);
             return 1;
         });
@@ -2600,7 +2658,7 @@ extern "C" {
     int
     GEOSCoordSeq_setXY_r(GEOSContextHandle_t extHandle, CoordinateSequence* cs, unsigned int idx, double x, double y)
     {
-        return execute(extHandle, 0, [&]() {
+        return execute<NotInterruptible>(extHandle, 0, [&]() {
             cs->setAt(CoordinateXY{x, y}, idx);
             return 1;
         });
@@ -2609,7 +2667,7 @@ extern "C" {
     int
     GEOSCoordSeq_setXYZ_r(GEOSContextHandle_t extHandle, CoordinateSequence* cs, unsigned int idx, double x, double y, double z)
     {
-        return execute(extHandle, 0, [&]() {
+        return execute<NotInterruptible>(extHandle, 0, [&]() {
             cs->setAt(Coordinate{x, y, z}, idx);
             return 1;
         });
@@ -2627,7 +2685,7 @@ extern "C" {
     GEOSCoordSeq_getOrdinate_r(GEOSContextHandle_t extHandle, const CoordinateSequence* cs,
                                unsigned int idx, unsigned int dim, double* val)
     {
-        return execute(extHandle, 0, [&]() {
+        return execute<NotInterruptible>(extHandle, 0, [&]() {
             *val = cs->getOrdinate(idx, dim);
             return 1;
         });
@@ -2654,7 +2712,7 @@ extern "C" {
     int
     GEOSCoordSeq_getXY_r(GEOSContextHandle_t extHandle, const CoordinateSequence* cs, unsigned int idx, double* x, double* y)
     {
-        return execute(extHandle, 0, [&]() {
+        return execute<NotInterruptible>(extHandle, 0, [&]() {
             auto& c = cs->getAt(idx);
             *x = c.x;
             *y = c.y;
@@ -2665,7 +2723,7 @@ extern "C" {
     int
     GEOSCoordSeq_getXYZ_r(GEOSContextHandle_t extHandle, const CoordinateSequence* cs, unsigned int idx, double* x, double* y, double* z)
     {
-        return execute(extHandle, 0, [&]() {
+        return execute<NotInterruptible>(extHandle, 0, [&]() {
             auto& c = cs->getAt(idx);
             *x = c.x;
             *y = c.y;
@@ -2677,7 +2735,7 @@ extern "C" {
     int
     GEOSCoordSeq_getSize_r(GEOSContextHandle_t extHandle, const CoordinateSequence* cs, unsigned int* size)
     {
-        return execute(extHandle, 0, [&]() {
+        return execute<NotInterruptible>(extHandle, 0, [&]() {
             const std::size_t sz = cs->getSize();
             *size = static_cast<unsigned int>(sz);
             return 1;
@@ -2687,7 +2745,7 @@ extern "C" {
     int
     GEOSCoordSeq_getDimensions_r(GEOSContextHandle_t extHandle, const CoordinateSequence* cs, unsigned int* dims)
     {
-        return execute(extHandle, 0, [&]() {
+        return execute<NotInterruptible>(extHandle, 0, [&]() {
             const std::size_t dim = cs->getDimension();
             *dims = static_cast<unsigned int>(dim);
 

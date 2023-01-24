@@ -44,6 +44,7 @@ foreach(_testfile ${_testfiles})
       string(CONCAT _testname "geos::" ${_testname})
     endif()
     add_test(NAME unit-${_cmake_testname} COMMAND test_geos_unit ${_testname})
+    set_tests_properties(unit-${_cmake_testname} PROPERTIES TIMEOUT 30)
 endforeach()
 
 # Run all the unit tests in one go, for faster memory checking
