@@ -1011,6 +1011,12 @@ extern "C" {
     }
 
     CoordinateSequence*
+    GEOSCoordSeq_createFromBuffer(double* buf, unsigned int size, int hasZ, int hasM)
+    {
+        return GEOSCoordSeq_createFromBuffer_r(handle, buf, size, hasZ, hasM);
+    }
+
+    CoordinateSequence*
     GEOSCoordSeq_copyFromBuffer(const double* buf, unsigned int size, int hasZ, int hasM)
     {
         return GEOSCoordSeq_copyFromBuffer_r(handle, buf, size, hasZ, hasM);

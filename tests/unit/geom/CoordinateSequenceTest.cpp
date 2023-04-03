@@ -21,7 +21,7 @@ using geos::geom::CoordinateXYM;
 using geos::geom::CoordinateXYZM;
 using geos::geom::CoordinateSequence;
 
-constexpr const int MAX_TESTS = 100;
+constexpr const std::size_t MAX_NUMBER_OF_TESTS = 100;
 
 namespace tut {
 //
@@ -55,7 +55,7 @@ struct test_coordinatearraysequence_data {
     };
 };
 
-typedef test_group<test_coordinatearraysequence_data, MAX_TESTS> group;
+typedef test_group<test_coordinatearraysequence_data, MAX_NUMBER_OF_TESTS> group;
 typedef group::object object;
 
 group test_coordinatearraysequence_group("geos::geom::CoordinateSequence");
@@ -989,11 +989,11 @@ void object::test<35>
 
     seq.closeRing();
 
-    ensure_equals(seq.size(), 5u);
-    ensure(seq.isRing());
+    ensure_equals("size() after first closeRing()" ,seq.size(), 5u);
+    ensure("isRing()", seq.isRing());
 
     seq.closeRing();
-    ensure_equals(seq.size(), 5u);
+    ensure_equals("size() after second closeRing()", seq.size(), 5u);
 }
 
 // test initializer_list constructor
@@ -1447,6 +1447,50 @@ void object::test<54>
     ensure(!xyz3.equalsIdentical(xy3));
     ensure(xyz3.equalsIdentical(xyz3_2));
     ensure(xyz3_2.equalsIdentical(xyz3));
+}
+
+// Test creation from external buffer (2D)
+template<>
+template<>
+void object::test<55>
+()
+{
+    double vals[] = {1, 2, 3, 4};
+
+    CoordinateSequence seq(vals, 2, false, false);
+
+    ensure_equals(seq.size(), 2u);
+    ensure_equals(seq.getAt(0), Coordinate(1, 2));
+    ensure_equals(seq.getAt(1), Coordinate(3, 4));
+
+    seq.add(Coordinate(5, 6));
+    ensure_equals(seq.size(), 3u);
+    ensure_equals(seq.getAt(0), Coordinate(1, 2));
+    ensure_equals(seq.getAt(1), Coordinate(3, 4));
+    ensure_equals(seq.getAt(2), Coordinate(5, 6));
+}
+
+// Test creation from external buffer (3D)
+template<>
+template<>
+void object::test<56>
+()
+{
+    double vals[] = {1, 2, 3, 4, 5, 6};
+
+    CoordinateSequence seq(vals, 2, true, false);
+
+    ensure_equals(seq.size(), 2u);
+    ensure(seq.getAt(0).equals3D(Coordinate(1, 2, 3)));
+    ensure(seq.getAt(1).equals3D(Coordinate(4, 5, 6)));
+    ensure_equals(seq.data(), vals);
+
+    seq.add(Coordinate(7, 8, 9));
+    ensure_equals(seq.size(), 3u);
+    ensure(seq.getAt(0).equals3D(Coordinate(1, 2, 3)));
+    ensure(seq.getAt(1).equals3D(Coordinate(4, 5, 6)));
+    ensure(seq.getAt(2).equals3D(Coordinate(7, 8, 9)));
+    ensure(seq.data() != vals);
 }
 
 } // namespace tut

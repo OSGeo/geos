@@ -20,7 +20,9 @@ target_include_directories(test_geos_unit
   PRIVATE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>)
 
-add_executable(test_cs ${CMAKE_CURRENT_LIST_DIR}/geom/CoordinateSequenceTest.cpp
+add_executable(test_cs
+    ${CMAKE_CURRENT_LIST_DIR}/geom/CoordinateSequenceTest.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/util/VectorTest.cpp
     ${CMAKE_CURRENT_LIST_DIR}/geos_unit.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../src/geom/Coordinate.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../src/io/Unload.cpp

@@ -2452,6 +2452,14 @@ extern "C" {
     }
 
     CoordinateSequence*
+    GEOSCoordSeq_createFromBuffer_r(GEOSContextHandle_t extHandle, double* buf, unsigned int size, int hasZ, int hasM)
+    {
+        return execute(extHandle, [&]() {
+            return new CoordinateSequence(buf, size, hasZ, hasM);
+        });
+    }
+
+    CoordinateSequence*
     GEOSCoordSeq_copyFromBuffer_r(GEOSContextHandle_t extHandle, const double* buf, unsigned int size, int hasZ, int hasM)
     {
         return execute(extHandle, [&]() {

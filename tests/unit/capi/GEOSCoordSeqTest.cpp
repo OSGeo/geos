@@ -764,5 +764,27 @@ void object::test<21>()
     GEOS_finish_r(handle);
 }
 
+// test GEOSCoordSeq_createFromBuffer
+template<>
+template<>
+void object::test<22>()
+{
+    std::vector<double> values{1, 2, 3, 4, 5, 6};
+
+    cs_ = GEOSCoordSeq_createFromBuffer(values.data(), (unsigned int) values.size(), true, false);
+
+    unsigned int dim_out;
+    ensure(GEOSCoordSeq_getDimensions(cs_, &dim_out));
+    ensure_equals(dim_out, 3u);
+
+    // Check first coordinate
+    values[2] = 999;
+    double x, y, z;
+    ensure(GEOSCoordSeq_getXYZ(cs_, 0, &x, &y, &z));
+    ensure_equals(x, 1);
+    ensure_equals(y, 2);
+    ensure_equals(z, 999);
+}
+
 } // namespace tut
 

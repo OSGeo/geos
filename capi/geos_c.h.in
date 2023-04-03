@@ -408,6 +408,14 @@ extern GEOSCoordSequence GEOS_DLL *GEOSCoordSeq_create_r(
     unsigned int size,
     unsigned int dims);
 
+/** \see GEOSCoordSeq_createFromBuffer */
+extern GEOSCoordSequence GEOS_DLL *GEOSCoordSeq_createFromBuffer_r(
+        GEOSContextHandle_t handle,
+        double* buf,
+        unsigned int size,
+        int hasZ,
+        int hasM);
+
 /** \see GEOSCoordSeq_copyFromBuffer */
 extern GEOSCoordSequence GEOS_DLL *GEOSCoordSeq_copyFromBuffer_r(
         GEOSContextHandle_t handle,
@@ -2063,7 +2071,24 @@ extern void GEOS_DLL GEOSFree(void *buffer);
 extern GEOSCoordSequence GEOS_DLL *GEOSCoordSeq_create(unsigned int size, unsigned int dims);
 
 /**
+<<<<<<< HEAD
 * Create a coordinate sequence by copying from an interleaved buffer of doubles (e.g., XYXY or XYZXYZ)
+=======
+* Create a coordinate sequence from a buffer of interleaved doubles (XYXY, XYZXYZ, etc.)
+* If possible, the CoordinateSequence will use the values directly from the buffer without
+* copying. (Currently, this is supported for XYZ and XYZM buffers only.)
+*
+* \param buf pointer to buffer
+* \param size number of coordinates in the sequence
+* \param hasZ does buffer have Z values?
+* \param hasM does buffer have M values?
+* \return the sequence or NULL on exception
+*/
+extern GEOSCoordSequence GEOS_DLL *GEOSCoordSeq_createFromBuffer(double* buf, unsigned int size, int hasZ, int hasM);
+
+/**
+* Create a coordinate sequence by copying from a buffer of doubles (XYXY, XYZXYZ, etc.)
+>>>>>>> 720bccf9e (CoordinateSequence: create using external buffer)
 * \param buf pointer to buffer
 * \param size number of coordinates in the sequence
 * \param hasZ does buffer have Z values?
@@ -2088,7 +2113,11 @@ extern GEOSCoordSequence GEOS_DLL *GEOSCoordSeq_copyFromBuffer(const double* buf
 extern GEOSCoordSequence GEOS_DLL *GEOSCoordSeq_copyFromArrays(const double* x, const double* y, const double* z, const double* m, unsigned int size);
 
 /**
+<<<<<<< HEAD
 * Copy the contents of a coordinate sequence to an interleaved buffer of doubles (e.g., XYXY or XYZXYZ)
+=======
+* Copy the contents of a coordinate sequence to a buffer of doubles (XYXY, XYZXYZ, etc.)
+>>>>>>> 720bccf9e (CoordinateSequence: create using external buffer)
 * \param s sequence to copy
 * \param buf buffer to which coordinates should be copied
 * \param hasZ copy Z values to buffer?

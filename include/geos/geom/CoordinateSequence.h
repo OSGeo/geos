@@ -19,6 +19,7 @@
 
 #include <geos/geom/Coordinate.h> // for applyCoordinateFilter
 #include <geos/geom/CoordinateSequenceIterator.h>
+#include <geos/util/Vector.h>
 
 #include <cassert>
 #include <vector>
@@ -89,11 +90,27 @@ public:
      * are not actually stored in the sequence.
      *
      * @param size size of the sequence to create
-     * @param hasz true if the stored
-     * @param hasm
-     * @param initialize
+     * @param hasz true if the sequence should store z values
+     * @param hasm true if the sequence should store m values
+     * @param initialize true if the sequence should be initialized to default coordinate values
      */
     CoordinateSequence(std::size_t size, bool hasz, bool hasm, bool initialize = true);
+
+    /**
+     * Create a CoordinateSequence from an externally-owned buffer
+     * of packed Coordinates. If Coordinates are added to the CoordinateSequence
+     * or the CoordinateSequence requires repacking, the values will
+     * be copied into a new buffer owned by this CoordinateSeuqnce.
+     * Code using a CoordinateSequence constructed in this way must not
+     * attempt to access references to coordinates with dimensions that
+     * are not actually stored in the sequence.
+     *
+     * @param buf buffer of interleaved coordinates
+     * @param size number of coordinates in the buffer
+     * @param hasz true if the buffer has z values
+     * @param hasm true if the buffer has m values
+     */
+    CoordinateSequence(double* buf, std::size_t size, bool hasz, bool hasm);
 
     /**
      * Create a CoordinateSequence from a list of XYZ coordinates.
@@ -726,7 +743,7 @@ public:
     }
 
 private:
-    std::vector<double> m_vect; // Vector to store values
+    geos::util::Vector<double> m_vect; // Vector to store values
 
     uint8_t m_stride;           // Stride of stored values, corresponding to underlying type
 
@@ -745,9 +762,7 @@ private:
     }
 
     void make_space(std::size_t pos, std::size_t n) {
-        m_vect.insert(std::next(m_vect.begin(), static_cast<std::ptrdiff_t>(pos * stride())),
-                      m_stride * n,
-                      DoubleNotANumber);
+        m_vect.make_space(m_vect.begin() + pos * stride(), n * stride());
     }
 
     std::uint8_t stride() const {

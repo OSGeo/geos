@@ -66,6 +66,33 @@ CoordinateSequence::CoordinateSequence(std::size_t sz, bool hasz, bool hasm, boo
     }
 }
 
+CoordinateSequence::CoordinateSequence(double* buf, std::size_t sz, bool hasz, bool hasm) :
+    m_vect(sz * (2u + hasm + hasz), buf),
+    m_stride(static_cast<std::uint8_t>(2 + hasm + hasz)),
+    m_hasdim(true),
+    m_hasz(hasz),
+    m_hasm(hasm)
+{
+    #ifdef GEOS_COORDSEQ_PADZ
+    // Copy the external buffer into an internally-owned buffer
+    // with z-padding.
+    auto typ = getCoordinateType();
+    if (typ == CoordinateType::XY) {
+        CoordinateSequence dst(sz, false, false);
+        for (std::size_t i =0; i < size(); i++) {
+            dst.setAt(getAt<CoordinateXY>(i), i);
+        }
+        *this = std::move(dst);
+    } else if (typ == CoordinateType::XYM) {
+        CoordinateSequence dst(sz, false, true);
+        for (std::size_t i =0; i < size(); i++) {
+            dst.setAt(getAt<CoordinateXYM>(i), i);
+        }
+        *this = std::move(dst);
+    }
+    #endif
+}
+
 CoordinateSequence::CoordinateSequence(std::size_t sz, std::size_t dim) :
     m_vect(sz * std::max(static_cast<std::uint8_t>(dim), static_cast<std::uint8_t>(3))),
     m_stride(std::max(static_cast<std::uint8_t>(dim), static_cast<std::uint8_t>(3))),
@@ -128,7 +155,7 @@ CoordinateSequence::CoordinateSequence(const std::initializer_list<CoordinateXYZ
 }
 
 template<typename T>
-void fillVector(std::vector<double> & v)
+void fillVector(util::Vector<double> & v)
 {
     const T c;
     T* from = reinterpret_cast<T*>(v.data());
@@ -152,8 +179,8 @@ CoordinateSequence::add(const CoordinateSequence& cs, std::size_t from, std::siz
 {
     if (cs.stride() == stride() && cs.hasM() == cs.hasM()) {
         m_vect.insert(m_vect.end(),
-                      std::next(cs.m_vect.cbegin(), static_cast<std::ptrdiff_t>(from * stride())),
-                      std::next(cs.m_vect.cbegin(), static_cast<std::ptrdiff_t>((to + 1u)*stride())));
+                      std::next(cs.m_vect.begin(), static_cast<std::ptrdiff_t>(from * stride())),
+                      std::next(cs.m_vect.begin(), static_cast<std::ptrdiff_t>((to + 1u)*stride())));
     } else {
         std::size_t pos = size();
         make_space(pos, to - from + 1);
