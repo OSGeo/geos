@@ -27,14 +27,24 @@ class GEOS_DLL Interrupt {
 public:
 
     typedef void (Callback)(void);
+    typedef void (ThreadCallback)(void*);
 
     /**
      * Request interruption of operations
      *
      * Operations will be terminated by a GEOSInterrupt
-     * exception at first occasion.
+     * exception at first occasion, by the first thread
+     * to check for an interrupt request.
      */
     static void request();
+
+    /**
+     * Request interruption of operations in the current thread
+     *
+     * Operations in the current thread will be terminated by
+     * a GEOSInterrupt at first occasion.
+     */
+    static void requestForCurrentThread();
 
     /** Cancel a pending interruption request */
     static void cancel();
@@ -43,16 +53,28 @@ public:
     static bool check();
 
     /** \brief
-     * Register a callback that will be invoked
+     * Register a callback that will be invoked by all threads
      * before checking for interruption requests.
      *
      * NOTE that interruption request checking may happen
-     * frequently so any callback would better be quick.
+     * frequently so the callback should execute quickly.
      *
      * The callback can be used to call Interrupt::request()
-     *
+     * or Interrupt::requestForCurrentThread().
      */
     static Callback* registerCallback(Callback* cb);
+
+    /** \brief
+     * Register a callback that will be invoked the current thread
+     * before checking for interruption requests.
+     *
+     * NOTE that interruption request checking may happen
+     * frequently so the callback should execute quickly.
+     *
+     * The callback can be used to call Interrupt::request()
+     * or Interrupt::requestForCurrentThread().
+     */
+    static ThreadCallback* registerThreadCallback(ThreadCallback* cb, void* data);
 
     /**
      * Invoke the callback, if any. Process pending interruption, if any.

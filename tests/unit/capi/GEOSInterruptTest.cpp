@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include <thread>
 
 namespace tut {
 //
@@ -18,6 +19,7 @@ namespace tut {
 // Common data used in test cases.
 struct test_capiinterrupt_data {
     static int numcalls;
+    static int maxcalls;
     static GEOSInterruptCallback* nextcb;
 
     static void
@@ -56,9 +58,18 @@ struct test_capiinterrupt_data {
         }
     }
 
+    static void
+    interruptAfterMaxCalls(void* data)
+    {
+        if (++*static_cast<int*>(data) >= maxcalls) {
+            GEOS_interruptThread();
+        }
+    }
+
 };
 
 int test_capiinterrupt_data::numcalls = 0;
+int test_capiinterrupt_data::maxcalls = 0;
 GEOSInterruptCallback* test_capiinterrupt_data::nextcb = nullptr;
 
 typedef test_group<test_capiinterrupt_data> group;
@@ -216,6 +227,41 @@ void object::test<5>
     nextcb = nullptr;
 
     GEOSGeom_destroy(geom1);
+
+    finishGEOS();
+}
+
+
+// Test callback is thread-local
+template<>
+template<>
+void object::test<6>
+()
+{
+    maxcalls = 3;
+    int calls_1 = 0;
+    int calls_2 = 0;
+
+    initGEOS(notice, notice);
+
+    auto buffer = [](GEOSInterruptThreadCallback* cb, void* data) {
+        GEOSGeometry* geom1 = GEOSGeomFromWKT("LINESTRING (0 0, 1 0)");
+
+        GEOS_interruptRegisterThreadCallback(cb, data);
+
+        GEOSGeometry* geom2 = GEOSBuffer(geom1, 1, 8);
+        GEOSGeom_destroy(geom2);
+        GEOSGeom_destroy(geom1);
+    };
+
+    std::thread t1(buffer, interruptAfterMaxCalls, &calls_1);
+    std::thread t2(buffer, interruptAfterMaxCalls, &calls_2);
+
+    t1.join();
+    t2.join();
+
+    ensure_equals(calls_1, maxcalls);
+    ensure_equals(calls_2, maxcalls);
 
     finishGEOS();
 }

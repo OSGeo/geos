@@ -116,10 +116,22 @@ extern "C" {
         return geos::util::Interrupt::registerCallback(cb);
     }
 
+    GEOSInterruptThreadCallback*
+    GEOS_interruptRegisterThreadCallback(GEOSInterruptThreadCallback* cb, void* data)
+    {
+        return geos::util::Interrupt::registerThreadCallback(cb, data);
+    }
+
     void
     GEOS_interruptRequest()
     {
         geos::util::Interrupt::request();
+    }
+
+    void
+    GEOS_interruptThread()
+    {
+        geos::util::Interrupt::requestForCurrentThread();
     }
 
     void
