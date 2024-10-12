@@ -9,7 +9,6 @@
 #include <geos/algorithm/PolygonNodeTopology.h>
 
 // std
-#include <sstream>
 #include <string>
 #include <memory>
 

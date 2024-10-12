@@ -13,7 +13,6 @@
 #include <geos/geom/Coordinate.h>
 // std
 #include <memory>
-#include <vector>
 
 namespace tut {
 using namespace geos::operation::overlay;

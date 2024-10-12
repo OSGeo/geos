@@ -18,7 +18,6 @@
 using geos::io::WKTReader;
 using geos::geom::CoordinateSequence;
 using geos::geom::Geometry;
-//using geos::geom::LineString;
 using geos::geom::GeometryFactory;
 using geos::noding::SegmentString;
 

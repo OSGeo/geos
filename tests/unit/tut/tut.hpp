@@ -4,14 +4,10 @@
 
 #undef public
 #undef private
-#include <iostream>
+#include <cassert>
 #include <map>
-#include <vector>
-#include <set>
 #include <string>
-#include <sstream>
-#include <iterator>
-#include <algorithm>
+
 
 #include "tut_exception.hpp"
 #include "tut_result.hpp"

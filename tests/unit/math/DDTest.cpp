@@ -10,10 +10,6 @@
 #include <tut/tut.hpp>
 #include <utility.h>
 
-// std
-#include <memory>
-#include <string>
-
 using namespace geos::math;
 
 namespace tut {

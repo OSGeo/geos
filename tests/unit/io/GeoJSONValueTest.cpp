@@ -6,9 +6,7 @@
 // geos
 #include <geos/io/GeoJSON.h>
 // std
-#include <sstream>
 #include <string>
-#include <memory>
 
 namespace tut {
 

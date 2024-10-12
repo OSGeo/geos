@@ -17,7 +17,6 @@
 // std
 #include <sstream>
 #include <memory>
-#include <cassert>
 
 namespace geos {
 namespace geom {

@@ -77,27 +77,27 @@ void object::test<3>
 ()
 {
     std::string wkt("LINESTRING(102.0 0.0, 103.0 1.0, 104.0 0.0, 105.0 1.0)");
-    std::string expected(std::string{"{\n"} +
-        "    \"type\": \"LineString\",\n" +
-        "    \"coordinates\": [\n" +
-        "        [\n" + 
-        "            102.0,\n" + 
-        "            0.0\n" + 
-        "        ],\n" + 
-        "        [\n" + 
-        "            103.0,\n" + 
-        "            1.0\n" + 
-        "        ],\n" + 
-        "        [\n" + 
-        "            104.0,\n" + 
-        "            0.0\n" + 
-        "        ],\n" + 
-        "        [\n" + 
-        "            105.0,\n" + 
-        "            1.0\n" +
-        "        ]\n" + 
-        "    ]\n" +
-        "}");
+    std::string expected(std::string{"{\n"
+        "    \"type\": \"LineString\",\n"
+        "    \"coordinates\": [\n"
+        "        [\n"
+        "            102.0,\n"
+        "            0.0\n"
+        "        ],\n"
+        "        [\n"
+        "            103.0,\n"
+        "            1.0\n"
+        "        ],\n"
+        "        [\n"
+        "            104.0,\n"
+        "            0.0\n"
+        "        ],\n"
+        "        [\n"
+        "            105.0,\n"
+        "            1.0\n"
+        "        ]\n"
+        "    ]\n"
+        "}"});
     test_geojson(wkt, expected, 4);
 }
 

@@ -13,7 +13,6 @@
 #include <geos/geom/GeometryCollection.h>
 #include <geos/geom/Coordinate.h>
 // std
-#include <sstream>
 #include <string>
 #include <memory>
 

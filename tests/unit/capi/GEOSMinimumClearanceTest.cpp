@@ -4,10 +4,6 @@
 // geos
 #include <geos_c.h>
 #include <geos/constants.h>
-// std
-#include <cstdarg>
-#include <cstdio>
-#include <cstdlib>
 
 #include "capi_test_utils.h"
 

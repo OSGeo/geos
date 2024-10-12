@@ -14,7 +14,6 @@
 #include <geos/geom/Coordinate.h>
 // std
 #include <cmath>
-#include <sstream>
 #include <string>
 #include <memory>
 #include <cfenv>

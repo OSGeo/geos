@@ -17,7 +17,6 @@
 #include <geos/io/WKTReader.h>
 #include <geos/operation/valid/TopologyValidationError.h>
 // std
-#include <cmath>
 #include <string>
 #include <memory>
 #include <iostream>

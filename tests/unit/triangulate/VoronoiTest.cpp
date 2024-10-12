@@ -19,8 +19,8 @@
 #include <geos/geom/CoordinateSequence.h>
 #include <geos/util.h>
 
-//#include <stdio.h>
 #include <iostream>
+
 using namespace geos::triangulate;
 using namespace geos::triangulate::quadedge;
 using namespace geos::geom;

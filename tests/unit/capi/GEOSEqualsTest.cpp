@@ -6,9 +6,6 @@
 #include <geos/constants.h>
 #include <geos_c.h>
 // std
-#include <cstdarg>
-#include <cstdio>
-#include <cstdlib>
 #include <cstring>
 
 #include "capi_test_utils.h"

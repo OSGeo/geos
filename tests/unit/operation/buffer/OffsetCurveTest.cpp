@@ -10,7 +10,6 @@
 #include <geos/operation/buffer/BufferParameters.h>
 #include <geos/geom/Geometry.h>
 #include <geos/io/WKTReader.h>
-// #include <geos/io/WKTWriter.h>
 
 // std
 #include <memory>

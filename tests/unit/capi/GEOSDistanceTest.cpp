@@ -6,11 +6,10 @@
 #include <geos_c.h>
 #include <geos/constants.h>
 // std
-#include <cstdarg>
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <fenv.h>
-#include <memory>
 #include <cmath>
 
 #include "capi_test_utils.h"

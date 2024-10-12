@@ -7,9 +7,7 @@
 #include <geos/geom/Coordinate.h>
 #include <geos/algorithm/Angle.h>
 // std
-#include <sstream>
 #include <string>
-#include <memory>
 
 namespace tut {
 //

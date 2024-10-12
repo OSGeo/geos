@@ -9,7 +9,9 @@
 # by the Free Software Foundation.
 # See the COPYING file for more information.
 ################################################################################
+
 file(GLOB_RECURSE _sources ${CMAKE_CURRENT_LIST_DIR}/*.cpp CONFIGURE_DEPEND)
+set_source_files_properties(${_sources} PROPERTIES COMPILE_FLAGS -O1)
 add_executable(test_geos_unit ${_sources})
 unset(_sources)
 
@@ -19,6 +21,11 @@ target_link_libraries(test_geos_unit PRIVATE geos geos_c Threads::Threads)
 target_include_directories(test_geos_unit
   PRIVATE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>)
+
+# Precompile TUT
+#if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.16")
+#    target_precompile_headers(test_geos_unit PRIVATE "${CMAKE_CURRENT_LIST_DIR}/tut/tut.hpp")
+#endif()
 
 file(GLOB_RECURSE _testfiles ${CMAKE_CURRENT_LIST_DIR}/**/*Test.cpp CONFIGURE_DEPEND)
 foreach(_testfile ${_testfiles})

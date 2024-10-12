@@ -20,11 +20,7 @@
 #include <geos/geom/MultiLineString.h>
 // std
 #include <memory>
-#include <fstream>
 #include <string>
-#include <iomanip>
-#include <iostream>
-
 
 namespace tut {
 //

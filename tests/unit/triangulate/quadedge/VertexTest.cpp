@@ -8,8 +8,6 @@
 #include <geos/triangulate/quadedge/Vertex.h>
 //#include <geos/io/WKTWriter.h>
 #include <geos/geom/Envelope.h>
-// std
-#include <stdio.h>
 
 using namespace geos::triangulate::quadedge;
 

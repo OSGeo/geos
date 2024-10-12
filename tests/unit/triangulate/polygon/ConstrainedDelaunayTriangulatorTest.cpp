@@ -11,9 +11,6 @@
 #include <geos/io/WKTWriter.h>
 #include <geos/triangulate/polygon/ConstrainedDelaunayTriangulator.h>
 
-// std
-#include <stdio.h>
-
 using geos::triangulate::polygon::ConstrainedDelaunayTriangulator;
 using geos::geom::Geometry;
 

@@ -1,6 +1,7 @@
 #ifndef TUT_CONSOLE_REPORTER
 #define TUT_CONSOLE_REPORTER
 #include <tut/tut.hpp>
+#include <iostream>
 #include <cassert>
 
 #if defined(TUT_USE_POSIX)

@@ -11,7 +11,6 @@
 // std
 #include <memory>
 #include <string>
-#include <vector>
 
 namespace tut {
 //

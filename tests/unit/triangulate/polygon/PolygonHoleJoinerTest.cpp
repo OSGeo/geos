@@ -13,9 +13,6 @@
 #include <geos/triangulate/polygon/PolygonHoleJoiner.h>
 #include <geos/util.h>
 
-// std
-#include <stdio.h>
-
 using geos::triangulate::polygon::PolygonHoleJoiner;
 using geos::geom::CoordinateSequence;
 using geos::geom::Geometry;

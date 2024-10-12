@@ -1,7 +1,7 @@
 #include <tut/tut.hpp>
 #include <geos/geom/LineSegment.h>
 #include <geos/geom/CoordinateSequence.h>
-#include <numeric>
+#include <algorithm>
 
 namespace tut {
 

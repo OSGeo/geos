@@ -11,7 +11,6 @@
 #include <geos/io/WKTReader.h>
 #include <geos/constants.h>
 // std
-#include <sstream>
 #include <string>
 #include <memory>
 

@@ -11,7 +11,6 @@
 #include <geos/io/WKTReader.h>
 // std
 #include <string>
-#include <vector>
 
 namespace tut {
 //

@@ -25,7 +25,6 @@
 #include <geos/io/WKTReader.h>
 
 // std
-#include <sstream>
 #include <string>
 #include <memory>
 

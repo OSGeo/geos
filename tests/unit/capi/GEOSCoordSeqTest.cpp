@@ -5,10 +5,9 @@
 // geos
 #include <geos_c.h>
 // std
-#include <cstdarg>
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
-#include <memory>
 
 #include "capi_test_utils.h"
 

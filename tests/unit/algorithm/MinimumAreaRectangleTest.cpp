@@ -8,7 +8,6 @@
 #include <geos/geom/Geometry.h>
 #include <utility.h>
 // std
-#include <sstream>
 #include <string>
 #include <memory>
 

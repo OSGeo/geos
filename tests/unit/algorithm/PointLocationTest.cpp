@@ -10,7 +10,6 @@
 #include <geos/algorithm/PointLocation.h>
 
 // std
-#include <sstream>
 #include <string>
 #include <memory>
 

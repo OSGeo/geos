@@ -15,7 +15,6 @@
 #include <geos/io/WKTWriter.h>
 #include <geos/util.h>
 // std
-#include <sstream>
 #include <string>
 #include <memory>
 

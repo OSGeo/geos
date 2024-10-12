@@ -5,8 +5,6 @@
 #include <geos/algorithm/locate/IndexedPointInAreaLocator.h>
 
 // std
-#include <sstream>
-#include <string>
 #include <memory>
 
 using geos::geom::CoordinateXY;

@@ -7,6 +7,7 @@
 #include <iterator>
 #include <cassert>
 #include <cmath>
+#include <sstream>
 
 #if defined(TUT_USE_POSIX)
 #include <errno.h>

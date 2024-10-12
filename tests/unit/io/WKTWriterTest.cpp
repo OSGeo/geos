@@ -20,7 +20,6 @@
 #include <geos/geom/CoordinateSequence.h>
 #include <geos/util.h>
 // std
-#include <sstream>
 #include <string>
 #include <memory>
 

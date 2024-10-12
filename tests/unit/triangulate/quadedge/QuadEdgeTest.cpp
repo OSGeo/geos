@@ -7,8 +7,6 @@
 #include <geos/triangulate/quadedge/Vertex.h>
 #include <geos/triangulate/quadedge/QuadEdge.h>
 #include <geos/triangulate/quadedge/QuadEdgeQuartet.h>
-// std
-#include <stdio.h>
 
 using namespace geos::triangulate::quadedge;
 

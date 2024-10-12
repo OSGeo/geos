@@ -16,7 +16,6 @@
 
 // std
 #include <cmath>
-#include <sstream>
 #include <string>
 #include <memory>
 

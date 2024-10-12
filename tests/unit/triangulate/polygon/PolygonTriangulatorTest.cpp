@@ -13,9 +13,6 @@
 #include <geos/triangulate/polygon/PolygonTriangulator.h>
 #include <geos/util.h>
 
-// std
-#include <stdio.h>
-
 using geos::triangulate::polygon::PolygonTriangulator;
 using geos::geom::CoordinateSequence;
 using geos::geom::Geometry;

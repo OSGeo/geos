@@ -20,7 +20,6 @@
 #include <geos/io/WKTReader.h>
 #include <geos/operation/relate/RelateOp.h>
 // std
-#include <cmath>
 #include <string>
 #include <memory>
 #include <thread>

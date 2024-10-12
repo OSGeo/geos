@@ -10,9 +10,6 @@
 #include <geos/geom/Coordinate.h>
 #include <geos/geom/LineSegment.h>
 // std
-#include <sstream>
-#include <string>
-#include <memory>
 #include <utility>
 
 

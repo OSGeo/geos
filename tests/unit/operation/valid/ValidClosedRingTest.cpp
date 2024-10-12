@@ -17,13 +17,11 @@
 #include <geos/io/WKTReader.h>
 #include <geos/operation/valid/TopologyValidationError.h>
 // std
-#include <cmath>
 #include <string>
 #include <memory>
 #include <iostream>
 
 using namespace geos::geom;
-//using namespace geos::operation;
 using namespace geos::operation::valid;
 using namespace geos::util;
 using namespace std;

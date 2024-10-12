@@ -5,10 +5,6 @@
 // geos
 #include <geos_c.h>
 // std
-#include <cstdarg>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
 
 #define QUOTE(x) #x
 #define EXPAND_AND_QUOTE(y) QUOTE(y)

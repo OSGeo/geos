@@ -8,8 +8,6 @@
 #include <geos/geom/Coordinate.h>
 #include <geos/geom/Envelope.h>
 #include <geos/geom/PrecisionModel.h>
-// std
-#include <memory>
 
 using namespace geos::geom;
 using namespace geos::noding::snapround;

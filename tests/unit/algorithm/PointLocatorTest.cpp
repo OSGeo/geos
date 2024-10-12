@@ -12,7 +12,6 @@
 #include <geos/geom/Geometry.h> // required for use in unique_ptr
 #include <geos/geom/Coordinate.h>
 // std
-#include <sstream>
 #include <string>
 #include <memory>
 

@@ -12,9 +12,6 @@
 #include <geos/io/WKTWriter.h>
 #include <geos/index/VertexSequencePackedRtree.h>
 
-// std
-#include <stdio.h>
-
 using geos::index::VertexSequencePackedRtree;
 using geos::geom::Point;
 

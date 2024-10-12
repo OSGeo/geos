@@ -23,7 +23,6 @@
 #include <geos/io/WKTReader.h>
 #include <geos/geom/Geometry.h>
 // std
-#include <sstream>
 #include <string>
 #include <memory>
 

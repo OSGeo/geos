@@ -6,9 +6,6 @@
 // geos
 #include <geos/io/ByteOrderValues.h>
 #include <geos/constants.h> // for int64
-// std
-#include <sstream>
-#include <memory>
 
 namespace tut {
 //

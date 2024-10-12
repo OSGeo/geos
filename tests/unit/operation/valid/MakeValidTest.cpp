@@ -12,11 +12,6 @@
 #include <geos/util.h>
 
 #include <utility.h>
-// std
-#include <cmath>
-#include <string>
-#include <vector>
-#include <fstream>
 
 using namespace geos::geom;
 using namespace geos::operation::valid;

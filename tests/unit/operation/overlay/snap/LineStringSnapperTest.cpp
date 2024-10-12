@@ -9,7 +9,6 @@
 #include <geos/geom/CoordinateList.h>
 #include <geos/geom/CoordinateSequence.h>
 // std
-#include <string>
 #include <vector>
 
 using geos::geom::CoordinateSequence;

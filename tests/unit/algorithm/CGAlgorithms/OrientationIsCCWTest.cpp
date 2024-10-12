@@ -15,7 +15,6 @@
 // std
 #include <string>
 #include <memory>
-#include <cassert>
 #include <sstream>
 
 using namespace geos::algorithm;

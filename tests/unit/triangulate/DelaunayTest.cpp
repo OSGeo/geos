@@ -11,12 +11,10 @@
 #include <geos/triangulate/quadedge/QuadEdgeSubdivision.h>
 #include <geos/triangulate/IncrementalDelaunayTriangulator.h>
 #include <geos/triangulate/DelaunayTriangulationBuilder.h>
-//#include <geos/io/WKTWriter.h>
 #include <geos/io/WKTReader.h>
 #include <geos/geom/GeometryCollection.h>
 #include <geos/geom/GeometryFactory.h>
 #include <geos/geom/CoordinateSequence.h>
-//#include <stdio.h>
 
 using namespace geos::triangulate;
 using namespace geos::triangulate::quadedge;

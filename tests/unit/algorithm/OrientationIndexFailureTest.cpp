@@ -7,9 +7,6 @@
 #include <geos/geom/Coordinate.h>
 #include <geos/algorithm/Orientation.h>
 // std
-#include <sstream>
-#include <string>
-#include <memory>
 
 using namespace geos::geom;
 using namespace geos::algorithm;

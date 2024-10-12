@@ -6,10 +6,6 @@
 // geos
 #include <geos/geomgraph/TopologyLocation.h>
 #include <geos/geom/Location.h>
-// std
-#include <memory>
-#include <string>
-#include <vector>
 
 using TopologyLocation = geos::geomgraph::TopologyLocation;
 using Location = geos::geom::Location;

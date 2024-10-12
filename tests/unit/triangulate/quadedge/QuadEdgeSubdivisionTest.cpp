@@ -21,9 +21,8 @@
 #include <geos/geom/Coordinate.h>
 #include <geos/operation/valid/RepeatedPointRemover.h>
 // std
-#include <stdio.h>
-#include <iostream>
 #include <algorithm>
+
 using namespace geos::triangulate::quadedge;
 using namespace geos::triangulate;
 using namespace geos::geom;

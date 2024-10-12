@@ -8,8 +8,6 @@
 #include <geos/index/ItemVisitor.h>
 #include <geos/io/WKTReader.h>
 
-#include <iostream>
-
 using namespace geos;
 
 namespace tut {

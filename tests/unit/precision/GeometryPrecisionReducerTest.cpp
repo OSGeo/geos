@@ -13,8 +13,6 @@
 #include <geos/io/WKTReader.h>
 // std
 #include <string>
-#include <vector>
-#include <iostream>
 
 using namespace geos::geom;
 using namespace geos::precision;

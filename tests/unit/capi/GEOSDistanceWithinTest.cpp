@@ -5,13 +5,6 @@
 // geos
 #include <geos/constants.h>
 #include <geos_c.h>
-// std
-#include <limits>
-#include <cstdarg>
-#include <cstdio>
-#include <cstdlib>
-#include <math.h>
-#include <memory>
 
 #include "capi_test_utils.h"
 

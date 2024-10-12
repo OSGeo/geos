@@ -6,11 +6,8 @@
 #include <geos_c.h>
 // std
 #include <array>
-#include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
-#include <memory>
-#include <string>
 #include <vector>
 
 #include "capi_test_utils.h"

@@ -5,8 +5,6 @@
 #include <geos/algorithm/BoundaryNodeRule.h>
 #include <geos/operation/BoundaryOp.h>
 // std
-#include <cmath>
-#include <iostream>
 #include <string>
 #include <memory>
 

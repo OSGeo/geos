@@ -8,9 +8,6 @@
 #include <geos/geom/PrecisionModel.h>
 #include <geos/geom/GeometryFactory.h>
 // std
-#include <cstdarg>
-#include <cstdio>
-#include <cstdlib>
 
 #include "capi_test_utils.h"
 
