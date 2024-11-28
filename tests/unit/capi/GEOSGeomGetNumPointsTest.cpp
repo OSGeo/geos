@@ -48,5 +48,13 @@ void object::test<4>()
     ensure_equals(GEOSGeomGetNumPoints(input_), 3);
 }
 
+template<>
+template<>
+void object::test<5>()
+{
+    input_ = fromWKT("LINEARRING (0 0, 1 1, 2 0, 0 0)");
+    ensure_equals(GEOSGeomGetNumPoints(input_), 4);
+}
+
 } // namespace tut
 
