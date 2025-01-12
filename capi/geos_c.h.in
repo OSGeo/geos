@@ -175,6 +175,12 @@ typedef struct GEOSBufParams_t GEOSBufferParams;
 */
 typedef struct GEOSMakeValidParams_t GEOSMakeValidParams;
 
+/**
+* Object containing information about cluster of geometries.
+* \see GEOSClusterInfo_destroy()
+*/
+typedef struct GEOSClusterInfo_t GEOSClusterInfo;
+
 #endif
 
 /** \cond */
@@ -1847,6 +1853,50 @@ extern GEOSGeometry GEOS_DLL *GEOSGeom_transformXYZ_r(
     const GEOSGeometry* g,
     GEOSTransformXYZCallback callback,
     void* userdata);
+
+/** \see GEOSClusterDBSCAN */
+extern GEOSClusterInfo GEOS_DLL* GEOSClusterDBSCAN_r(
+    GEOSContextHandle_t handle,
+    const GEOSGeometry* g,
+    double eps,
+    unsigned minPoints);
+
+/** \see GEOSClusterGeometryDistance */
+extern GEOSClusterInfo GEOS_DLL* GEOSClusterGeometryDistance_r(
+    GEOSContextHandle_t handle,
+    const GEOSGeometry* g,
+    double d);
+
+/** \see GEOSClusterGeometryIntersects */
+extern GEOSClusterInfo GEOS_DLL* GEOSClusterGeometryIntersects_r(
+    GEOSContextHandle_t handle,
+    const GEOSGeometry* g);
+
+/** \see GEOSClusterEnvelopeDistance */
+extern GEOSClusterInfo GEOS_DLL* GEOSClusterEnvelopeDistance_r(
+    GEOSContextHandle_t handle,
+    const GEOSGeometry* g,
+    double d);
+
+/** \see GEOSClusterEnvelopeIntersects */
+extern GEOSClusterInfo GEOS_DLL* GEOSClusterEnvelopeIntersects_r(
+    GEOSContextHandle_t handle,
+    const GEOSGeometry* g);
+
+/** \see GEOSClusterInfo_getNumClusters */
+extern size_t GEOS_DLL GEOSClusterInfo_getNumClusters_r(GEOSContextHandle_t, const GEOSClusterInfo* clusters);
+
+/** \see GEOSClusterInfo_getClusterSize */
+extern size_t GEOS_DLL GEOSClusterInfo_getClusterSize_r(GEOSContextHandle_t, const GEOSClusterInfo* clusters, size_t i);
+
+/** \see GEOSClusterInfo_getClustersForInputs */
+extern size_t GEOS_DLL* GEOSClusterInfo_getClustersForInputs_r(GEOSContextHandle_t, const GEOSClusterInfo* clusters);
+
+/** \see GEOSClusterInfo_getInputsForClusterN */
+extern const size_t GEOS_DLL* GEOSClusterInfo_getInputsForClusterN_r(GEOSContextHandle_t, const GEOSClusterInfo* clusters, size_t i);
+
+/** \see GEOSClusterInfo_destroy */
+extern void GEOS_DLL GEOSClusterInfo_destroy_r(GEOSContextHandle_t, GEOSClusterInfo* info);
 
 /* ========= Algorithms ========= */
 
@@ -3759,6 +3809,123 @@ extern GEOSGeometry GEOS_DLL *GEOSClipByRect(
 extern GEOSGeometry GEOS_DLL *GEOSSharedPaths(
     const GEOSGeometry* g1,
     const GEOSGeometry* g2);
+///@}
+
+/* ========== Clustering functions ========== */
+/** @name Clustering
+* Functions for clustering geometries
+*/
+
+
+
+
+static const size_t GEOS_CLUSTER_NONE = (size_t) -1;
+
+///@{
+/**
+ * @brief GEOSClusterDBSCAN
+ *
+ * Cluster geometries using the DBSCAN algorithm
+ *
+ * @param g a collection of geometries to be clustered
+ * @param eps distance parameter for clustering
+ * @param minPoints density parameter for clustering
+ * @return cluster information object
+ */
+extern GEOSClusterInfo GEOS_DLL* GEOSClusterDBSCAN(const GEOSGeometry* g, double eps, unsigned minPoints);
+
+/**
+ * @brief GEOSClusterGeometryDistance
+ *
+ * Cluster geometries according to a distance threshold
+ *
+ * @param g a collection of geometries to be clustered
+ * @param d minimum distance between geometries in the same cluster
+ * @return cluster information object
+ */
+extern GEOSClusterInfo GEOS_DLL* GEOSClusterGeometryDistance(const GEOSGeometry* g, double d);
+
+/**
+ * @brief GEOSClusterGeometryIntersects
+ *
+ * Cluster geometries that intersect
+ *
+ * @param g a collection of geometries to be clustered
+ * @return cluster information object
+ */
+extern GEOSClusterInfo GEOS_DLL* GEOSClusterGeometryIntersects(const GEOSGeometry* g);
+
+/**
+ * @brief GEOSClusterEnvelopeDistance
+ *
+ * Cluster geometries according to an envelope distance threshold
+ *
+ * @param g a collection of geometries to be clustered
+ * @param d minimum envelope distance between geometries in the same cluster
+ * @return cluster information object
+ */
+extern GEOSClusterInfo GEOS_DLL* GEOSClusterEnvelopeDistance(const GEOSGeometry* g, double d);
+
+/**
+ * @brief GEOSClusterEnvelopeIntersects
+ *
+ * Cluster geometries whose envelopes intersect
+ *
+ * @param g
+ * @return cluster information object
+ */
+extern GEOSClusterInfo GEOS_DLL* GEOSClusterEnvelopeIntersects(const GEOSGeometry* g);
+
+/**
+ * @brief GEOSClusterInfo_getNumClusters
+ *
+ * Get the number of clusters identifed by a clustering operation
+ *
+ * @param clusters cluster information object
+ * @return number of clusters identifed
+ */
+extern size_t GEOS_DLL GEOSClusterInfo_getNumClusters(const GEOSClusterInfo* clusters);
+
+/**
+ * @brief GEOSClusterInfo_getSize
+ *
+ * Get the number of elements in the ith cluster (0-indexed)
+ *
+ * @param clusters cluster information object
+ * @param i cluster for which a size will be returned
+ * @return number of elements in the cluster
+ */
+extern size_t GEOS_DLL GEOSClusterInfo_getClusterSize(const GEOSClusterInfo* clusters, size_t i );
+
+/**
+ * @brief GEOSClusterInfo_getClustersForInputs
+ *
+ * Get the cluster index associated with each input to the clustering operation.
+ * Inputs that do are not associated with any cluster will have an index of GEOS_CLUSTER_NONE.
+ *
+ * @param clusters cluster information object
+ * @return an array of cluster indices, to be freed by the caller.
+ */
+extern size_t GEOS_DLL* GEOSClusterInfo_getClustersForInputs(const GEOSClusterInfo* clusters);
+
+/**
+ * @brief GEOSClusterInfo_getInputsForClusterN
+ * @param clusters cluster information object
+ * @param i index of the cluster for which indices should be retrieved
+ * @return a pointer to an array of cluster indices. Size of the array is indicated by
+ *         GEOSClusterInfo_getNumElements. The array is owner by the cluster information
+ *         object and should not be modified or freed by the caller.
+ */
+extern const size_t GEOS_DLL* GEOSClusterInfo_getInputsForClusterN(const GEOSClusterInfo* clusters, size_t i);
+
+/**
+ * @brief GEOSClusterInfo_destroy
+ *
+ * Destroy a cluster information object.
+ *
+ * @param clusters cluster information object
+ */
+extern void GEOS_DLL GEOSClusterInfo_destroy(GEOSClusterInfo* clusters);
 
 ///@}
 
@@ -4975,9 +5142,9 @@ extern char GEOS_DLL GEOSEqualsIdentical(
 
 /**
 * Calculate the [DE9IM](https://en.wikipedia.org/wiki/DE-9IM) string for a geometry pair
-* and compare against a DE9IM pattern. 
+* and compare against a DE9IM pattern.
 * Returns true if the computed matrix matches the pattern.
-* The pattern is a 9-character string 
+* The pattern is a 9-character string
 * containing symbols in the set "012TF*".
 * "012F" match the corresponding dimension symbol;
 * "T" matches any non-empty dimension; "*" matches any dimension.
