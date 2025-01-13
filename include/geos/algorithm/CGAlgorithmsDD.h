@@ -20,6 +20,7 @@
 
 #include <geos/export.h>
 #include <geos/math/DD.h>
+#include <cmath>
 
 // Forward declarations
 namespace geos {
@@ -91,41 +92,14 @@ public:
         double pbx, double pby,
         double pcx, double pcy)
     {
-        /**
-         * A value which is safely greater than the relative round-off
-         * error in double-precision numbers
-         */
-        double constexpr DP_SAFE_EPSILON =  1e-15;
-
-        double detsum;
         double const detleft = (pax - pcx) * (pby - pcy);
         double const detright = (pay - pcy) * (pbx - pcx);
         double const det = detleft - detright;
-
-        if(detleft > 0.0) {
-            if(detright <= 0.0) {
-                return orientation(det);
-            }
-            else {
-                detsum = detleft + detright;
-            }
-        }
-        else if(detleft < 0.0) {
-            if(detright >= 0.0) {
-                return orientation(det);
-            }
-            else {
-                detsum = -detleft - detright;
-            }
-        }
-        else {
-            return orientation(det);
-        }
-
-        double const errbound = DP_SAFE_EPSILON * detsum;
-        if((det >= errbound) || (-det >= errbound)) {
-            return orientation(det);
-        }
+        // Coefficient due to https://doi.org/10.1007/s10543-015-0574-9
+        double const error = std::abs(detleft + detright)
+                             * 3.3306690621773724e-16;
+        if (std::abs(det) >= error)
+            return (det > 0) - (det < 0);
         return CGAlgorithmsDD::FAILURE;
     };
 
@@ -187,6 +161,3 @@ protected:
 
 } // namespace geos::algorithm
 } // namespace geos
-
-
-
