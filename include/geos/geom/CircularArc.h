@@ -83,7 +83,7 @@ public:
 
     /// Returns whether this arc forms a straight line (p0, p1, and p2 are collinear)
     bool isLinear() const {
-        return std::isnan(getRadius());
+        return !std::isfinite(getRadius());
     }
 
     /// Return the inner angle of the sector associated with this arc

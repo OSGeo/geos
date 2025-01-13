@@ -7,9 +7,9 @@
 #include <geos/geom/Coordinate.h>
 #include <geos/algorithm/Angle.h>
 // std
-#include <sstream>
 #include <string>
-#include <memory>
+
+using geos::MATH_PI;
 
 namespace tut {
 //
@@ -198,7 +198,40 @@ void object::test<6>
         ensure_equals(std::to_string(angrad), rCos, std::cos(angrad));
 
     }
+}
 
+template<>
+template<>
+void object::test<7>()
+{
+    set_test_name("isWithinCCW");
+
+    // interval from 0 to pi
+    {
+        double from = 0, to = MATH_PI;
+        ensure("pi/2 in [0, pi]", Angle::isWithinCCW(Angle::PI_OVER_2, from, to));
+        ensure("0 in [0, pi]", Angle::isWithinCCW(0, from, to));
+        ensure("pi in [0, pi]", Angle::isWithinCCW(MATH_PI, from, to));
+        ensure("-pi/2 not in [0, pi]", !Angle::isWithinCCW(Angle::normalizePositive(-Angle::PI_OVER_2), from, to));
+    }
+
+    // interval from pi to 0
+    {
+        double from = MATH_PI, to = 0;
+        ensure("pi/2 not in [pi, 0]", !Angle::isWithinCCW(Angle::PI_OVER_2, from, to));
+        ensure("0 in [pi, 0]", Angle::isWithinCCW(0, from, to));
+        ensure("pi in [pi, 0]", Angle::isWithinCCW(MATH_PI, from, to));
+        ensure("-pi/2 in [pi, 0]", Angle::isWithinCCW(Angle::normalizePositive(-Angle::PI_OVER_2), from, to));
+    }
+
+    // interval from -pi/2 to pi/2
+    {
+        double from = Angle::normalizePositive(-Angle::PI_OVER_2), to = Angle::PI_OVER_2;
+        ensure("0 in [-pi/2, pi/2]", Angle::isWithinCCW(0, from, to));
+        ensure("pi/2 in [-pi/2, pi/2]", Angle::isWithinCCW(Angle::PI_OVER_2, from, to));
+        ensure("-pi/2 in [-pi/2, pi/2]", Angle::isWithinCCW(Angle::normalizePositive(-Angle::PI_OVER_2), from, to));
+        ensure("pi not in [-pi/2, pi/2]", !Angle::isWithinCCW(MATH_PI, from, to));
+    }
 }
 
 

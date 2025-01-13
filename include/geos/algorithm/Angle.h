@@ -204,6 +204,15 @@ public:
     ///
     static double normalizePositive(double angle);
 
+    /// Returns true if angle x is within the counterclockwise
+    /// arc from angle a to angle b
+    ///
+    /// @param angle angle to test
+    /// @param from starting angle of arc
+    /// @param to ending angle of arc
+    ///
+    /// @return true if `angle` is within [from, to]
+    static bool isWithinCCW(double angle, double from, double to);
 
     /// Computes the unoriented smallest difference between two angles.
     ///
