@@ -236,6 +236,11 @@ DD operator/(const DD &lhs, double rhs)
     return rv;
 }
 
+DD operator- (const DD& x)
+{
+    return x.negate();
+}
+
 /* public */
 DD DD::negate() const
 {

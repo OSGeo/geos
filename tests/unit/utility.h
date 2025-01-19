@@ -97,16 +97,16 @@ instanceOf(InstanceType const* instance)
 }
 
 inline void
-ensure_equals_xy(geos::geom::Coordinate const& actual,
-                  geos::geom::Coordinate const& expected)
+ensure_equals_xy(geos::geom::CoordinateXY const& actual,
+                  geos::geom::CoordinateXY const& expected)
 {
     ensure_equals("Coordinate X", actual.x, expected.x );
     ensure_equals("Coordinate Y", actual.y, expected.y );
 }
 
 inline void
-ensure_equals_xy(geos::geom::Coordinate const& actual,
-                  geos::geom::Coordinate const& expected,
+ensure_equals_xy(geos::geom::CoordinateXY const& actual,
+                  geos::geom::CoordinateXY const& expected,
                   double tol)
 {
     ensure_equals("Coordinate X", actual.x, expected.x, tol );

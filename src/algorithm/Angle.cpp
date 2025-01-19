@@ -181,6 +181,15 @@ Angle::normalizePositive(double angle)
     return angle;
 }
 
+bool
+Angle::isWithinCCW(double x, double a, double b) {
+    if (b > a) {
+        return x >= a && x <= b;
+    } else {
+        return x >= a || x <= b;
+    }
+}
+
 /* public static */
 double
 Angle::diff(double ang1, double ang2)
