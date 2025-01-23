@@ -98,44 +98,15 @@ using operation::valid::TopologyValidationError;
 
 namespace {
 
+using geos::geom::Geometry;
+
+//--------------------------------------------------
+
 std::unique_ptr<const PreparedGeometry>
 prepare(const geom::Geometry* g)
 {
     return PreparedGeometryFactory::prepare(g);
 }
-
-// Asymmetric Rounding Algorithm  - equivalent to Java Math.round()
-// Copy from geos/util/math.cpp
-double
-java_math_round(double val)
-{
-    double n;
-    double f = std::fabs(std::modf(val, &n));
-
-    if(val >= 0) {
-        if(f < 0.5) {
-            return std::floor(val);
-        }
-        else if(f > 0.5) {
-            return std::ceil(val);
-        }
-        else {
-            return (n + 1.0);
-        }
-    }
-    else {
-        if(f < 0.5) {
-            return std::ceil(val);
-        }
-        else if(f > 0.5) {
-            return std::floor(val);
-        }
-        else {
-            return n;
-        }
-    }
-} // java_math_round
-
 
 #ifdef not_used
 // a utility function defining a very simple method to indent a line of text
@@ -186,6 +157,21 @@ void toupper(std::string& s)
 }
 
 std::string
+trimBlanks(const std::string& in)
+{
+    std::string out;
+    std::string::size_type pos = in.find_first_not_of(" \t\n\r");
+    if(pos != std::string::npos) {
+        out = in.substr(pos);
+    }
+    pos = out.find_last_not_of(" \t\n\r");
+    if(pos != std::string::npos) {
+        out = out.substr(0, pos + 1);
+    }
+    return out;
+}
+
+std::string
 normalize_filename(const std::string& str)
 {
     std::string newstring;
@@ -209,93 +195,6 @@ normalize_filename(const std::string& str)
     return newstring;
 }
 
-static int
-checkOverlaySuccess(geom::Geometry const& gRes, geom::Geometry const& gRealRes)
-{
-    double tol = operation::overlay::snap::GeometrySnapper::computeSizeBasedSnapTolerance(gRes);
-    if(gRes.equals(&gRealRes)) {
-        return 1;
-    }
-    std::cerr << "Using an overlay tolerance of " << tol << std::endl;
-    if(gRes.equalsExact(&gRealRes, tol)) {
-        return 1;
-    }
-    return 0;
-}
-
-/* Could be an XMLTester class private but oh well.. */
-static int
-checkBufferSuccess(geom::Geometry const& gRes, geom::Geometry const& gRealRes, double dist)
-{
-
-    using geos::xmltester::BufferResultMatcher;
-
-    int success = 1;
-    do {
-
-        if(gRes.getGeometryTypeId() != gRealRes.getGeometryTypeId()) {
-            std::cerr << "Expected result is of type "
-                      << gRes.getGeometryType()
-                      << "; obtained result is of type "
-                      << gRealRes.getGeometryType()
-                      << std::endl;
-            success = 0;
-            break;
-        }
-
-        // Is a buffer always an area ?
-        if(gRes.getDimension() != 2) {
-            std::cerr << "Don't know how to validate "
-                      << "result of buffer operation "
-                      << "when expected result is not an "
-                      << "areal type."
-                      << std::endl;
-        }
-
-        if(!BufferResultMatcher::isBufferResultMatch(gRealRes, gRes, dist)) {
-            std::cerr << "BufferResultMatcher FAILED" << std::endl;
-            success = 0;
-            break;
-        }
-
-    }
-    while(0);
-
-    return success;
-}
-
-static int
-checkSingleSidedBufferSuccess(geom::Geometry& gRes,
-                              geom::Geometry& gRealRes, double dist)
-{
-    int success = 1;
-    do {
-
-        if(gRes.getGeometryTypeId() != gRealRes.getGeometryTypeId()) {
-            std::cerr << "Expected result is of type "
-                      << gRes.getGeometryType()
-                      << "; obtained result is of type "
-                      << gRealRes.getGeometryType()
-                      << std::endl;
-            success = 0;
-            break;
-        }
-
-        geos::xmltester::SingleSidedBufferResultMatcher matcher;
-        if(! matcher.isBufferResultMatch(gRealRes,
-                                         gRes,
-                                         dist)) {
-            std::cerr << "SingleSidedBufferResultMatcher FAILED" << std::endl;
-            success = 0;
-            break;
-        }
-
-    }
-    while(0);
-
-    return success;
-}
-
 XMLTester::XMLTester()
     :
     gA(nullptr),
@@ -306,11 +205,11 @@ XMLTester::XMLTester()
     wktwriter(nullptr),
     wkbreader(nullptr),
     wkbwriter(nullptr),
-    test_predicates(0),
-    failed(0),
-    succeeded(0),
+    failedCount(0),
+    succeededCount(0),
     caseCount(0),
     testCount(0),
+    testLineNum(0),
     testFileCount(0),
     totalTestCount(0),
     curr_file(nullptr),
@@ -332,77 +231,80 @@ XMLTester::setVerbosityLevel(int value)
     return old_value;
 }
 
+std::string 
+XMLTester::testcaseRef()
+{
+    std::stringstream ref;
+    ref << *curr_file << " (" << testLineNum << "): ";
+    ref << "case " << caseCount;
+    ref << ", test " << testCount;
+    return ref.str();
+}
+
 /*private*/
 void
-XMLTester::printTest(bool success, const std::string& expected_result, const std::string& actual_result,
-                     const util::Profile& prof)
+XMLTester::printTestSQL(bool success, const std::string& expected_result, const std::string& actual_result)
+{
+    std::cout << "INSERT INTO \"" << normalize_filename(*curr_file) << "\" VALUES ("
+                << caseCount << ", "
+                << testCount << ", "
+                //<< "'" << opSignature << "', "
+                << "'" << curr_case_desc << "', ";
+
+    std::string geomOut;
+
+    if(gA) {
+        std::cout << "'" << printGeom(gA) << "', ";
+    }
+    else {
+        std::cout << "NULL, ";
+    }
+    if(gB) {
+        std::cout << "'" << printGeom(gB) << "', ";
+    }
+    else {
+        std::cout << "NULL, ";
+    }
+    std::cout << "'" << expected_result << "', "
+                << "'" << actual_result << "', ";
+
+    if(success) {
+        std::cout << "'t'";
+    }
+    else {
+        std::cout << "'f'";
+    }
+    std::cout << ");" << std::endl;
+}
+
+void
+XMLTester::printTest(bool success, const std::string& op, const std::string& expected_result, const std::string& actual_result)
 {
     if(sqlOutput) {
-        std::cout << "INSERT INTO \"" << normalize_filename(*curr_file) << "\" VALUES ("
-                  << caseCount << ", "
-                  << testCount << ", "
-                  << "'" << opSignature << "', "
-                  << "'" << curr_case_desc << "', ";
+        printTestSQL(success, expected_result, actual_result);
+        return;
+    }
+    //-- no output for quiet success
+    if (success && verbose == 0)
+        return;
 
-        std::string geomOut;
+    std::cout << testcaseRef() << ": " ;
+    std::cout << op << " " << (success ? "ok." : "failed.");
 
+    // print geometry on failure for -v
+    // print geometry always for -v -v and above
+    if (verbose > 1 || (verbose == 1 && !success)) {
+        std::cout << "\tDescription: " << curr_case_desc << std::endl;
         if(gA) {
-            std::cout << "'" << printGeom(gA) << "', ";
+            std::cout << "\tGeometry A: " << printGeom(gA) << std::endl;
         }
-        else {
-            std::cout << "NULL, ";
-        }
-
         if(gB) {
-            std::cout << "'" << printGeom(gB) << "', ";
+            std::cout << "\tGeometry B: " << printGeom(gB) << std::endl;
         }
-        else {
-            std::cout << "NULL, ";
-        }
-
-        std::cout << "'" << expected_result << "', "
-                  << "'" << actual_result << "', ";
-
-        if(success) {
-            std::cout << "'t'";
-        }
-        else {
-            std::cout << "'f'";
-        }
-
-        std::cout << ");" << std::endl;
+        std::cout << "\tExpected: " << expected_result << std::endl;
+        std::cout << "\tActual:   " << actual_result << std::endl;
     }
-
-    else {
-        std::cout << *curr_file << ":";
-        std::cout << " case" << caseCount << ":";
-        std::cout << " test" << testCount << ": "
-                  << opSignature;
-        std::cout << ": " << (success ? "ok." : "failed.");
-        std::cout << " (" << std::setprecision(15) << java_math_round(prof.getTot() / 1000) << " ms)" << std::endl;
-
-        // print geometry on failure for -v
-        // print geometry no matter what for -v -v and above
-        if (verbose > 1 || (verbose == 1 && !success)) {
-            std::cout << "\tDescription: " << curr_case_desc << std::endl;
-
-            if(gA) {
-                std::cout << "\tGeometry A: ";
-                printGeom(std::cout, gA);
-                std::cout << std::endl;
-            }
-
-            if(gB) {
-                std::cout << "\tGeometry B: ";
-                printGeom(std::cout, gB);
-                std::cout << std::endl;
-            }
-
-            std::cout << "\tExpected result: " << expected_result << std::endl;
-            std::cout << "\tObtained result: " << actual_result << std::endl;
-            std::cout << std::endl;
-        }
-    }
+    std::cout << std::endl;
 }
 
 void
@@ -447,7 +349,6 @@ XMLTester::run(const std::string& source)
     }
 
     parseRun(node);
-
 }
 
 void
@@ -455,14 +356,14 @@ XMLTester::resultSummary(std::ostream& os) const
 {
     os << "Files: " << testFileCount << std::endl;
     os << "Tests: " << totalTestCount << std::endl;
-    os << "Failed: " << failed << std::endl;
-    os << "Succeeded: " << succeeded << std::endl;
+    os << "Failed: " << failedCount << std::endl;
+    os << "Succeeded: " << succeededCount << std::endl;
 }
 
 void
 XMLTester::resetCounters()
 {
-    testFileCount = totalTestCount = failed = succeeded = 0;
+    testFileCount = totalTestCount = failedCount = succeededCount = 0;
 }
 
 void
@@ -584,7 +485,6 @@ XMLTester::testValid(const geom::Geometry* g, const std::string& label)
         std::cerr << *curr_file << ":"
                   << " case" << caseCount << ":"
                   << " test" << testCount << ": "
-                  << opSignature << ": "
                   << " invalid geometry (" << label
                   << "): " << err->toString() << std::endl;
     }
@@ -643,21 +543,6 @@ XMLTester::parseGeometry(const std::string& in, const char* label)
     return ret.release();
 }
 
-std::string
-XMLTester::trimBlanks(const std::string& in)
-{
-    std::string out;
-    std::string::size_type pos = in.find_first_not_of(" \t\n\r");
-    if(pos != std::string::npos) {
-        out = in.substr(pos);
-    }
-    pos = out.find_last_not_of(" \t\n\r");
-    if(pos != std::string::npos) {
-        out = out.substr(0, pos + 1);
-    }
-    return out;
-}
-
 void
 XMLTester::parseCase(const tinyxml2::XMLNode* node)
 {
@@ -670,9 +555,6 @@ XMLTester::parseCase(const tinyxml2::XMLNode* node)
     gA = nullptr;
     gB = nullptr;
 
-
-    //dump_to_stdout(node);
-
     curr_case_desc.clear();
     const tinyxml2::XMLNode* txt = node->FirstChildElement("desc");
     if(txt) {
@@ -681,10 +563,6 @@ XMLTester::parseCase(const tinyxml2::XMLNode* node)
             curr_case_desc = trimBlanks(txt->Value());
         }
     }
-
-    //std::cerr << "Desc: " << curr_case_desc << std::endl;
-
-
     try {
         const tinyxml2::XMLNode* el = node->FirstChildElement("a");
         geomAin = el->FirstChild()->Value();
@@ -710,7 +588,7 @@ XMLTester::parseCase(const tinyxml2::XMLNode* node)
 
     if(thrownException != "") {
         std::cout << *curr_file << ":";
-        std::cout << " case" << caseCount << ":";
+        std::cout << " case" << caseCount << " (" << node->GetLineNum() << "): ";
         std::cout << " skipped (" << thrownException << ")." << std::endl;
         if (gA) delete gA;
         if (gB) delete gB;
@@ -724,20 +602,13 @@ XMLTester::parseCase(const tinyxml2::XMLNode* node)
     for(testnode = node->FirstChildElement("test");
             testnode;
             testnode = testnode->NextSiblingElement("test")) {
-        parseTest(testnode);
+       runTest(testnode);
     }
 
     totalTestCount += testCount;
 
     delete gA;
     delete gB;
-}
-
-/*private*/
-void
-XMLTester::printGeom(std::ostream& os, const geom::Geometry* g)
-{
-    os << printGeom(g);
 }
 
 std::string
@@ -756,6 +627,133 @@ XMLTester::printGeom(const geom::Geometry* g)
     }
 }
 
+void
+XMLTester::runTest(const tinyxml2::XMLNode* node)
+{
+    Test test(*this); 
+    ++testCount;
+    testLineNum = node->GetLineNum();
+
+    bool success = test.run(node, gA, gB);
+
+    if(success) {
+        ++succeededCount;
+    }
+    else {
+        ++failedCount;
+    }
+}
+
+void
+XMLTester::runPredicates(const geom::Geometry* p_gA, const geom::Geometry* p_gB)
+{
+    std::cout << "\t    Equals:\tAB=" << (p_gA->equals(p_gB) ? "T" : "F") << ", BA=" << (p_gB->equals(
+                  p_gA) ? "T" : "F") << std::endl;
+    std::cout << "\t  Disjoint:\tAB=" << (p_gA->disjoint(p_gB) ? "T" : "F") << ", BA=" << (p_gB->disjoint(
+                  p_gA) ? "T" : "F") << std::endl;
+    std::cout << "\tIntersects:\tAB=" << (p_gA->intersects(p_gB) ? "T" : "F") << ", BA=" << (p_gB->intersects(
+                  p_gA) ? "T" : "F") << std::endl;
+    std::cout << "\t   Touches:\tAB=" << (p_gA->touches(p_gB) ? "T" : "F") << ", BA=" << (p_gB->touches(
+                  p_gA) ? "T" : "F") << std::endl;
+    std::cout << "\t   Crosses:\tAB=" << (p_gA->crosses(p_gB) ? "T" : "F") << ", BA=" << (p_gB->crosses(
+                  p_gA) ? "T" : "F") << std::endl;
+    std::cout << "\t    Within:\tAB=" << (p_gA->within(p_gB) ? "T" : "F") << ", BA=" << (p_gB->within(
+                  p_gA) ? "T" : "F") << std::endl;
+    std::cout << "\t  Contains:\tAB=" << (p_gA->contains(p_gB) ? "T" : "F") << ", BA=" << (p_gB->contains(
+                  p_gA) ? "T" : "F") << std::endl;
+    std::cout << "\t  Overlaps:\tAB=" << (p_gA->overlaps(p_gB) ? "T" : "F") << ", BA=" << (p_gB->overlaps(
+                  p_gA) ? "T" : "F") << std::endl;
+
+    std::cout << "\t  Prepared Disjoint:\tAB=" << (prepare(p_gA)->disjoint(p_gB) ? "T" : "F") << ", BA=" << (prepare(
+                  p_gB)->disjoint(p_gA) ? "T" : "F") << std::endl;
+    std::cout << "\tPrepared Intersects:\tAB=" << (prepare(p_gA)->intersects(p_gB) ? "T" : "F") << ", BA=" << (prepare(
+                  p_gB)->intersects(p_gA) ? "T" : "F") << std::endl;
+    std::cout << "\t   Prepared Touches:\tAB=" << (prepare(p_gA)->touches(p_gB) ? "T" : "F") << ", BA=" << (prepare(
+                  p_gB)->touches(p_gA) ? "T" : "F") << std::endl;
+    std::cout << "\t   Prepared Crosses:\tAB=" << (prepare(p_gA)->crosses(p_gB) ? "T" : "F") << ", BA=" << (prepare(
+                  p_gB)->crosses(p_gA) ? "T" : "F") << std::endl;
+    std::cout << "\t    Prepared Within:\tAB=" << (prepare(p_gA)->within(p_gB) ? "T" : "F") << ", BA=" << (prepare(
+                  p_gB)->within(p_gA) ? "T" : "F") << std::endl;
+    std::cout << "\t  Prepared Contains:\tAB=" << (prepare(p_gA)->contains(p_gB) ? "T" : "F") << ", BA=" << (prepare(
+                  p_gB)->contains(p_gA) ? "T" : "F") << std::endl;
+    std::cout << "\t Prepared Overlaps:\tAB=" << (prepare(p_gA)->overlaps(p_gB) ? "T" : "F") << ", BA=" << (prepare(
+                  p_gB)->overlaps(p_gA) ? "T" : "F") << std::endl;
+}
+
+XMLTester::~XMLTester()
+{
+}
+//============================================================================
+
+/* static */
+bool
+Test::checkOverlaySuccess(Geometry const& gExpected, Geometry const& gActual)
+{
+    double tol = operation::overlay::snap::GeometrySnapper::computeSizeBasedSnapTolerance(gExpected);
+    //-- BUG: this allows all empties to test equal
+    if(gExpected.equals(&gActual)) {
+        return 1;
+    }
+    //TODO: is this needed by any tests?
+    std::cerr << "Using an overlay tolerance of " << tol << std::endl;
+    if(gExpected.equalsExact(&gActual, tol)) {
+        return 1;
+    }
+    return 0;
+}
+
+/* static */
+bool
+Test::checkBufferSuccess(Geometry const& gExpected, Geometry const& gActual, double dist)
+{
+    using geos::xmltester::BufferResultMatcher;
+
+    if(gExpected.getGeometryTypeId() != gActual.getGeometryTypeId()) {
+        std::cerr << "Expected result is of type "
+                    << gExpected.getGeometryType()
+                    << "; obtained result is of type "
+                    << gActual.getGeometryType()
+                    << std::endl;
+        return false;
+    }
+    // Is a buffer always an area ?
+    if(gExpected.getDimension() != 2) {
+        std::cerr << "Don't know how to validate "
+                    << "result of buffer operation "
+                    << "when expected result is not an "
+                    << "areal type."
+                    << std::endl;
+    }
+    if(!BufferResultMatcher::isBufferResultMatch(gActual, gExpected, dist)) {
+        std::cerr << "BufferResultMatcher FAILED" << std::endl;
+        return false;
+    }
+    return true;
+}
+
+/* static */
+bool
+Test::checkSingleSidedBufferSuccess(geom::Geometry& gExpected,
+                              geom::Geometry& gActual, double dist)
+{
+    if(gExpected.getGeometryTypeId() != gActual.getGeometryTypeId()) {
+        std::cerr << "Expected result is of type "
+                    << gExpected.getGeometryType()
+                    << "; obtained result is of type "
+                    << gActual.getGeometryType()
+                    << std::endl;
+        return false;
+    }
+    geos::xmltester::SingleSidedBufferResultMatcher matcher;
+    if(! matcher.isBufferResultMatch(gActual,
+                                        gExpected,
+                                        dist)) {
+        std::cerr << "SingleSidedBufferResultMatcher FAILED" << std::endl;
+        return false;
+    }
+    return true;
+}
+
 /**
 * Computes the maximum area delta value
 * resulting from identity equations over the overlay operations.
@@ -763,8 +761,9 @@ XMLTester::printGeom(const geom::Geometry* g)
 * If the overlay operations are computed correctly
 * the area delta is expected to be very small (e.g. < 1e-6).
 */
+/* static */
 double
-XMLTester::areaDelta(const geom::Geometry* a, const geom::Geometry* b, std::string& rsltMaxDiffOp, double maxDiff, std::stringstream& ss)
+Test::areaDelta(const geom::Geometry* a, const geom::Geometry* b, std::string& rsltMaxDiffOp, double maxDiff, std::stringstream& ss)
 {
     double areaA = a == nullptr ? 0 : a->getArea();
     double areaB = b == nullptr ? 0 : b->getArea();
@@ -825,7 +824,6 @@ XMLTester::areaDelta(const geom::Geometry* a, const geom::Geometry* b, std::stri
 
     // normalize the area delta value
     double diffScore = maxDelta / (areaA + areaB);
-
     if (diffScore > maxDiff) {
         ss << std::endl << "A" << std::endl;
         ss << *a;
@@ -843,31 +841,84 @@ XMLTester::areaDelta(const geom::Geometry* a, const geom::Geometry* b, std::stri
         ss << *geomSD;
         ss << std::endl;
     }
-
     return diffScore;
 }
 
+void
+Test::checkResult( const Geometry& result ) 
+{
+    checkResult( result, 
+    [](Geometry& expected, Geometry& actual) -> bool {
+        //TODO: change to equalsExact, since compareTo doesn't check empty type
+        return expected.compareTo(&actual) == 0;
+    });
+}
 
 void
-XMLTester::parseTest(const tinyxml2::XMLNode* node)
+Test::checkResult( const Geometry& result, 
+    std::function<bool(Geometry& expected, Geometry& actual)> isMatch ) 
 {
-    using namespace operation::overlay;
+    std::string expectedRes = opResult;
+    std::unique_ptr<Geometry> gExpectedRes(tester.parseGeometry(expectedRes, "expected"));
+    gExpectedRes->normalize();
 
-    typedef std::unique_ptr< geom::Geometry > GeomPtr;
+    std::unique_ptr<Geometry> gActualRes(result.clone());
+    gActualRes->normalize();
 
-    int success = 0; // no success by default
-    std::string opName;
-    std::string opArg1;
-    std::string opArg2;
-    std::string opArg3;
-    std::string opArg4;
-    std::string opRes;
+    isSuccess = isMatch(*gExpectedRes, *gActualRes);
 
-    ++testCount;
+    if (testValidOutput) {
+        isSuccess &= tester.testValid(gActualRes.get(), "result");
+    }
+    actualResultStr = tester.printGeom(gActualRes.get());
+}
 
+//TODO: remove this hack when tests are fixed.  Only used for union, and has a bug where empties test equal
+void
+Test::checkUnionResult( const Geometry& result ) 
+{
+    checkResult( result, 
+        [](Geometry& expected, Geometry& actual) -> bool {
+            return checkOverlaySuccess(expected, actual);
+    });
+}
+
+void
+Test::checkResult( bool result ) 
+{
+    actualResultStr = result ? "true" : "false";
+    if (actualResultStr == opResult) {
+        isSuccess = true;
+    }
+}
+
+void
+Test::checkResult( double result) 
+{
+    char* rest;
+    double expectedRes = std::strtod(opResult.c_str(), &rest);
+    if(rest == opResult.c_str()) {
+        throw std::runtime_error("malformed testcase: missing expected double value");
+    }
+    if (expectedRes == 0.0) {
+        if (result == 0.0) {
+            isSuccess = true;
+        }
+    }
+    else {
+        if (std::abs(expectedRes - result) / expectedRes < 1e-3) {
+            isSuccess = true;
+        }
+    }
+    std::stringstream ss;
+    ss << result;
+    actualResultStr = ss.str();
+}
+
+void Test::parse(const tinyxml2::XMLNode* node) {
     const tinyxml2::XMLNode* opnode = node->FirstChildElement("op");
     if(! opnode) {
-        throw(runtime_error("case has no op"));
+        throw(runtime_error("test has no op"));
     }
 
     //dump_to_stdout(opnode);
@@ -904,15 +955,13 @@ XMLTester::parseTest(const tinyxml2::XMLNode* node)
     const tinyxml2::XMLNode* resnode = opnode->FirstChild();
     if(! resnode) {
         std::stringstream p_tmp;
-        p_tmp << "op of test " << testCount
-              << " of case " << caseCount
-              << " has no expected result child";
+        p_tmp << tester.testcaseRef() << ": op has no expected result child";
         throw(runtime_error(p_tmp.str()));
     }
-    opRes = resnode->Value();
+    opResult = resnode->Value();
 
     // trim blanks
-    opRes = trimBlanks(opRes);
+    opResult = trimBlanks(opResult);
     opName = trimBlanks(opName);
     tolower(opName);
 
@@ -939,1402 +988,412 @@ XMLTester::parseTest(const tinyxml2::XMLNode* node)
         }
         opSig += opArg4;
     }
-
     opSignature = opName + "(" + opSig + ")";
+}
 
-    std::string actual_result = "NONE";
+bool Test::run(const tinyxml2::XMLNode* node, Geometry* geomA, Geometry* geomB)
+{
+    parse(node);
+    Geometry* argA = geomA;
+    Geometry* argB = geomB;
+    //-- switch geom args if specified
+    if (opArg1 == "B") {
+        argA = geomB;
+        argB = geomA;
+    }
+    execute(argA, argB);
+    tester.printTest(isSuccess, opSignature, opResult, actualResultStr);
+    return isSuccess;
+}
 
-    // expected_result will be modified by specific tests
-    // if needed (geometry normalization, for example)
-    std::string expected_result = opRes;
-
-    util::Profile profile("op");
-
+void Test::execute(Geometry* geomA, Geometry* geomB)
+{
     try {
-        if(opName == "relate") {
-            std::unique_ptr<geom::IntersectionMatrix> im(gA->relate(gB));
-            assert(im.get());
-
-            if(im->matches(opArg3)) {
-                actual_result = "true";
-            }
-            else {
-                actual_result = "false";
-            }
-
-            if(actual_result == opRes) {
-                success = 1;
-            }
-        }
-        else if(opName == "relatestring") {
-            std::unique_ptr<geom::IntersectionMatrix> im(gA->relate(gB));
-            assert(im.get());
-
-            actual_result = im->toString();
-
-            if(actual_result == opRes) {
-                success = 1;
-            }
-        }
-
-        else if(opName == "isvalid") {
-            geom::Geometry* p_gT = gA;
-            if((opArg1 == "B" || opArg1 == "b") && gB) {
-                p_gT = gB;
-            }
-
-            if(p_gT->isValid()) {
-                actual_result = "true";
-            }
-            else {
-                actual_result = "false";
-            }
-
-            if(actual_result == opRes) {
-                success = 1;
-            }
-
-        }
-
-        else if(opName == "intersection") {
-            geom::Geometry* g1 = opArg1 == "B" ? gB : gA;
-            geom::Geometry* g2 = opArg2 == "B" ? gB : gA;
-
-            GeomPtr gRes(parseGeometry(opRes, "expected"));
-            gRes->normalize();
-
-            profile.start();
-
-            GeomPtr gRealRes(g1->intersection(g2));
-
-            profile.stop();
-
-            gRealRes->normalize();
-
-            if(gRes->compareTo(gRealRes.get()) == 0) {
-                success = 1;
-            }
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-
-            if(testValidOutput) {
-                success &= int(testValid(gRealRes.get(), "result"));
-            }
-        }
-
-        else if(opName == "intersectionng") {
-
-            GeomPtr gRes(parseGeometry(opRes, "expected"));
-            gRes->normalize();
-
-            profile.start();
-
-            GeomPtr gRealRes = OverlayNG::overlay(gA, gB, OverlayNG::INTERSECTION);
-
-            profile.stop();
-
-            gRealRes->normalize();
-
-            if(gRes->compareTo(gRealRes.get()) == 0) {
-                success = 1;
-            }
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-
-            if(testValidOutput) {
-                success &= int(testValid(gRealRes.get(), "result"));
-            }
-        }
-
-        else if(opName == "unionng") {
-
-            GeomPtr gRes(parseGeometry(opRes, "expected"));
-            gRes->normalize();
-
-            profile.start();
-
-            GeomPtr gRealRes = OverlayNG::overlay(gA, gB, OverlayNG::UNION);
-
-            profile.stop();
-
-            gRealRes->normalize();
-
-            if(gRes->compareTo(gRealRes.get()) == 0) {
-                success = 1;
-            }
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-
-            if(testValidOutput) {
-                success &= int(testValid(gRealRes.get(), "result"));
-            }
-        }
-
-        else if(opName == "differenceng") {
-
-            GeomPtr gRes(parseGeometry(opRes, "expected"));
-            gRes->normalize();
-
-            profile.start();
-
-            const geom::Geometry* dgA = gA;
-            const geom::Geometry* dgB = gB;
-
-            // Swap arguments if necessary
-            if((opArg1 == "B" || opArg1 == "b") && gB) {
-                dgA = gB;
-                dgB = gA;
-            }
-
-            GeomPtr gRealRes = OverlayNG::overlay(dgA, dgB, OverlayNG::DIFFERENCE);
-
-            profile.stop();
-
-            gRealRes->normalize();
-
-            if(gRes->compareTo(gRealRes.get()) == 0) {
-                success = 1;
-            }
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-
-            if(testValidOutput) {
-                success &= int(testValid(gRealRes.get(), "result"));
-            }
-        }
-
-        else if(opName == "symdifferenceng") {
-
-            GeomPtr gRes(parseGeometry(opRes, "expected"));
-            gRes->normalize();
-
-            profile.start();
-
-            GeomPtr gRealRes = OverlayNG::overlay(gA, gB, OverlayNG::SYMDIFFERENCE);
-
-            profile.stop();
-
-            gRealRes->normalize();
-
-            if(gRes->compareTo(gRealRes.get()) == 0) {
-                success = 1;
-            }
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-
-            if(testValidOutput) {
-                success &= int(testValid(gRealRes.get(), "result"));
-            }
-        }
-
-
-        else if(opName == "intersectionsr") {
-
-            GeomPtr gRes(parseGeometry(opRes, "expected"));
-            gRes->normalize();
-            double precision = 1.0;
-
-            if(opArg3 != "") {
-                precision = std::atof(opArg3.c_str());
-            }
-
-            profile.start();
-            geom::PrecisionModel precMod(precision);
-            GeomPtr gRealRes = OverlayNG::overlay(gA, gB, OverlayNG::INTERSECTION, &precMod);
-
-            profile.stop();
-
-            gRealRes->normalize();
-
-            if(gRes->compareTo(gRealRes.get()) == 0) {
-                success = 1;
-            }
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-
-            if(testValidOutput) {
-                success &= int(testValid(gRealRes.get(), "result"));
-            }
-        }
-
-        else if(opName == "intersectionsin") {
-
-            GeomPtr gRes(parseGeometry(opRes, "expected"));
-            gRes->normalize();
-            double precision = 1.0;
-
-            if(opArg3 != "") {
-                precision = std::atof(opArg3.c_str());
-            }
-
-            profile.start();
-            geom::PrecisionModel precMod(precision);
-            GeomPtr gRealRes = OverlayNGRobust::Intersection(gA, gB);
-
-            profile.stop();
-
-            gRealRes->normalize();
-
-            if(gRes->compareTo(gRealRes.get()) == 0) {
-                success = 1;
-            }
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-
-            if(testValidOutput) {
-                success &= int(testValid(gRealRes.get(), "result"));
-            }
-        }
-
-
-        else if(opName == "unionsr") {
-
-            GeomPtr gRes(parseGeometry(opRes, "expected"));
-            gRes->normalize();
-            double precision = 1.0;
-            GeomPtr gRealRes;
-
-            if (gB) {
-                geom::PrecisionModel precMod(precision);
-                gRealRes = OverlayNG::overlay(gA, gB, OverlayNG::UNION, &precMod);
-                if(opArg3 != "") {
-                    precision = std::atof(opArg3.c_str());
-                }
-            }
-            else {
-                geom::PrecisionModel precMod(precision);
-
-                // gRealRes = OverlayNG::geomunion(gA, &precMod);
-                gRealRes = UnaryUnionNG::Union(gA, precMod);
-                if(opArg2 != "") {
-                    precision = std::atof(opArg2.c_str());
-                }
-            }
-
-            gRealRes->normalize();
-
-            if(gRes->compareTo(gRealRes.get()) == 0) {
-                success = 1;
-            }
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-
-            if(testValidOutput) {
-                success &= int(testValid(gRealRes.get(), "result"));
-            }
-        }
-
-        else if(opName == "differencesr") {
-
-            GeomPtr gRes(parseGeometry(opRes, "expected"));
-            gRes->normalize();
-            double precision = 1.0;
-
-            if(opArg3 != "") {
-                precision = std::atof(opArg3.c_str());
-            }
-
-            const geom::Geometry* dgA = gA;
-            const geom::Geometry* dgB = gB;
-
-            // Swap arguments if necessary
-            if((opArg1 == "B" || opArg1 == "b") && gB) {
-                dgA = gB;
-                dgB = gA;
-            }
-
-            profile.start();
-            geom::PrecisionModel precMod(precision);
-            GeomPtr gRealRes = OverlayNG::overlay(dgA, dgB, OverlayNG::DIFFERENCE, &precMod);
-
-            profile.stop();
-
-            gRealRes->normalize();
-
-            if(gRes->compareTo(gRealRes.get()) == 0) {
-                success = 1;
-            }
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-
-            if(testValidOutput) {
-                success &= int(testValid(gRealRes.get(), "result"));
-            }
-        }
-
-
-        else if(opName == "symdifferencesr") {
-
-            GeomPtr gRes(parseGeometry(opRes, "expected"));
-            gRes->normalize();
-            double precision = 1.0;
-
-            if(opArg3 != "") {
-                precision = std::atof(opArg3.c_str());
-            }
-
-            profile.start();
-            geom::PrecisionModel precMod(precision);
-            GeomPtr gRealRes = OverlayNG::overlay(gA, gB, OverlayNG::SYMDIFFERENCE, &precMod);
-
-            profile.stop();
-
-            gRealRes->normalize();
-
-            if(gRes->compareTo(gRealRes.get()) == 0) {
-                success = 1;
-            }
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-
-            if(testValidOutput) {
-                success &= int(testValid(gRealRes.get(), "result"));
-            }
-        }
-
-        else if(opName == "densify") {
-            geom::Geometry* p_gT = gA;
-
-            geom::util::Densifier den(p_gT);
-            double distanceTolerance = std::atof(opArg2.c_str());
-            den.setDistanceTolerance(distanceTolerance);
-            GeomPtr gRealRes = den.getResultGeometry();
-            gRealRes->normalize();
-
-            GeomPtr gRes(parseGeometry(opRes, "expected"));
-            gRes->normalize();
-            if(gRes->compareTo(gRealRes.get()) == 0) {
-                success = 1;
-            }
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-        }
-
-
-        else if(opName == "union") {
-            geom::Geometry* g1 = opArg1 == "B" ? gB : gA;
-            geom::Geometry* g2 = opArg2 == "B" ? gB : gA;
-
-            GeomPtr gRes(parseGeometry(opRes, "expected"));
-            gRes->normalize();
-
-            profile.start();
-
-            GeomPtr gRealRes;
-            if(gB) {
-                gRealRes = g1->Union(g2);
-            }
-            else {
-                gRealRes = g1->Union();
-            }
-
-            profile.stop();
-            gRealRes->normalize();
-
-            success = checkOverlaySuccess(*gRes, *gRealRes);
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-
-            if(testValidOutput) {
-                success &= int(testValid(gRealRes.get(), "result"));
-            }
-        }
-
-        else if(opName == "difference") {
-            geom::Geometry* g1 = opArg1 == "B" ? gB : gA;
-            geom::Geometry* g2 = opArg2 == "B" ? gB : gA;
-
-            GeomPtr gRes(parseGeometry(opRes, "expected"));
-            gRes->normalize();
-
-            GeomPtr gRealRes(g1->difference(g2));
-
-            gRealRes->normalize();
-
-            if(gRes->compareTo(gRealRes.get()) == 0) {
-                success = 1;
-            }
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-
-            if(testValidOutput) {
-                success &= int(testValid(gRealRes.get(), "result"));
-            }
-        }
-
-        else if(opName == "symdifference") {
-            geom::Geometry* g1 = opArg1 == "B" ? gB : gA;
-            geom::Geometry* g2 = opArg2 == "B" ? gB : gA;
-
-            GeomPtr gRes(parseGeometry(opRes, "expected"));
-            gRes->normalize();
-
-            GeomPtr gRealRes(g1->symDifference(g2));
-
-            gRealRes->normalize();
-
-            if(gRes->compareTo(gRealRes.get()) == 0) {
-                success = 1;
-            }
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-
-            if(testValidOutput) {
-                success &= int(testValid(gRealRes.get(), "result"));
-            }
-        }
-
-        else if(opName == "intersects") {
-            geom::Geometry* g1 = opArg1 == "B" ? gB : gA;
-            geom::Geometry* g2 = opArg2 == "B" ? gB : gA;
-
-            actual_result = "false";
-            if(usePrepared) {
-                if(prepare(g1)->intersects(g2)) {
-                    actual_result = "true";
-                }
-            }
-            else if(g1->intersects(g2)) {
-                actual_result = "true";
-            }
-
-            if(actual_result == opRes) {
-                success = 1;
-            }
-        }
-
-        else if(opName == "contains") {
-            geom::Geometry* g1 = opArg1 == "B" ? gB : gA;
-            geom::Geometry* g2 = opArg2 == "B" ? gB : gA;
-
-            actual_result = "false";
-            if(usePrepared) {
-                if(prepare(g1)->contains(g2)) {
-                    actual_result = "true";
-                }
-            }
-            else if(g1->contains(g2)) {
-                actual_result = "true";
-            }
-
-            if(actual_result == opRes) {
-                success = 1;
-            }
-        }
-
-        else if(opName == "overlaps") {
-            geom::Geometry* g1 = opArg1 == "B" ? gB : gA;
-            geom::Geometry* g2 = opArg2 == "B" ? gB : gA;
-
-            actual_result = "false";
-            if(usePrepared) {
-                if(prepare(g1)->overlaps(g2)) {
-                    actual_result = "true";
-                }
-            }
-            else if(g1->overlaps(g2)) {
-                actual_result = "true";
-            }
-
-            if(actual_result == opRes) {
-                success = 1;
-            }
-        }
-
-        else if(opName == "within") {
-            geom::Geometry* g1 = opArg1 == "B" ? gB : gA;
-            geom::Geometry* g2 = opArg2 == "B" ? gB : gA;
-
-            actual_result = "false";
-            if(usePrepared) {
-                if(prepare(g1)->within(g2)) {
-                    actual_result = "true";
-                }
-            }
-            else if(g1->within(g2)) {
-                actual_result = "true";
-            }
-
-            if(actual_result == opRes) {
-                success = 1;
-            }
-        }
-
-        else if(opName == "touches") {
-            geom::Geometry* g1 = opArg1 == "B" ? gB : gA;
-            geom::Geometry* g2 = opArg2 == "B" ? gB : gA;
-
-            actual_result = "false";
-            if(usePrepared) {
-                if(prepare(g1)->touches(g2)) {
-                    actual_result = "true";
-                }
-            }
-            else if(g1->touches(g2)) {
-                actual_result = "true";
-            }
-
-            if(actual_result == opRes) {
-                success = 1;
-            }
-        }
-
-        else if(opName == "crosses") {
-            geom::Geometry* g1 = opArg1 == "B" ? gB : gA;
-            geom::Geometry* g2 = opArg2 == "B" ? gB : gA;
-
-            actual_result = "false";
-            if(usePrepared) {
-                if(prepare(g1)->crosses(g2)) {
-                    actual_result = "true";
-                }
-            }
-            else if(g1->crosses(g2)) {
-                actual_result = "true";
-            }
-
-            if(actual_result == opRes) {
-                success = 1;
-            }
-        }
-
-        else if(opName == "disjoint") {
-            geom::Geometry* g1 = opArg1 == "B" ? gB : gA;
-            geom::Geometry* g2 = opArg2 == "B" ? gB : gA;
-
-            actual_result = "false";
-            if(usePrepared) {
-                if(prepare(g1)->disjoint(g2)) {
-                    actual_result = "true";
-                }
-            }
-            else if(g1->disjoint(g2)) {
-                actual_result = "true";
-            }
-
-            if(actual_result == opRes) {
-                success = 1;
-            }
-        }
-
-        else if(opName == "covers") {
-            geom::Geometry* g1 = opArg1 == "B" ? gB : gA;
-            geom::Geometry* g2 = opArg2 == "B" ? gB : gA;
-
-            actual_result = "false";
-            if(usePrepared) {
-                if(prepare(g1)->covers(g2)) {
-                    actual_result = "true";
-                }
-            }
-            else if(g1->covers(g2)) {
-                actual_result = "true";
-            }
-
-            if(actual_result == opRes) {
-                success = 1;
-            }
-        }
-
-        // equalsTopo() is synonym for equals() in JTS
-        else if(opName == "equalstopo") {
-            geom::Geometry* g1 = opArg1 == "B" ? gB : gA;
-            geom::Geometry* g2 = opArg2 == "B" ? gB : gA;
-
-            actual_result = "false";
-            if(g1->equals(g2)) {
-                actual_result = "true";
-            }
-
-            if(actual_result == opRes) {
-                success = 1;
-            }
-        }
-
-        else if(opName == "equalsexact") {
-            geom::Geometry* g1 = opArg1 == "B" ? gB : gA;
-            geom::Geometry* g2 = opArg2 == "B" ? gB : gA;
-
-            actual_result = "false";
-            if(g1->equalsExact(g2)) {
-                actual_result = "true";
-            }
-
-            if(actual_result == opRes) {
-                success = 1;
-            }
-        }
-
-        // rather than implementing equalsnorm in the library,
-        // we just do it in this one test case for now
-        else if(opName == "equalsnorm") {
-            geom::Geometry* g1 = opArg1 == "B" ? gB : gA;
-            geom::Geometry* g2 = opArg2 == "B" ? gB : gA;
-
-            g1->normalize();
-            g2->normalize();
-
-            actual_result = "false";
-            if(g1->equalsExact(g2)) {
-                actual_result = "true";
-            }
-
-            if(actual_result == opRes) {
-                success = 1;
-            }
-        }
-
-
-        else if(opName == "coveredby") {
-            geom::Geometry* g1 = opArg1 == "B" ? gB : gA;
-            geom::Geometry* g2 = opArg2 == "B" ? gB : gA;
-
-            actual_result = "false";
-            if(usePrepared) {
-                if(prepare(g1)->coveredBy(g2)) {
-                    actual_result = "true";
-                }
-            }
-            else if(g1->coveredBy(g2)) {
-                actual_result = "true";
-            }
-
-            if(actual_result == opRes) {
-                success = 1;
-            }
-        }
-
-        else if(opName == "getboundary") {
-            geom::Geometry* p_gT = gA;
-            if((opArg1 == "B" || opArg1 == "b") && gB) {
-                p_gT = gB;
-            }
-
-            GeomPtr gRes(parseGeometry(opRes, "expected"));
-            gRes->normalize();
-
-            GeomPtr gRealRes(p_gT->getBoundary());
-            gRealRes->normalize();
-
-            if(gRes->compareTo(gRealRes.get()) == 0) {
-                success = 1;
-            }
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-
-            if(testValidOutput) {
-                success &= int(testValid(gRealRes.get(), "result"));
-            }
-        }
-
-        else if(opName == "getcentroid") {
-            geom::Geometry* p_gT = gA;
-            if((opArg1 == "B" || opArg1 == "b") && gB) {
-                p_gT = gB;
-            }
-
-            GeomPtr gRes(parseGeometry(opRes, "expected"));
-            gRes->normalize();
-
-            GeomPtr gRealRes(p_gT->getCentroid());
-            gRealRes->normalize();
-
-            if(gRes->compareTo(gRealRes.get()) == 0) {
-                success = 1;
-            }
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-
-            if(testValidOutput) {
-                success &= int(testValid(gRealRes.get(), "result"));
-            }
-        }
-
-        else if(opName == "issimple") {
-            geom::Geometry* p_gT = gA;
-            if((opArg1 == "B" || opArg1 == "b") && gB) {
-                p_gT = gB;
-            }
-
-            if(p_gT->isSimple()) {
-                actual_result = "true";
-            }
-            else {
-                actual_result = "false";
-            }
-
-            if(actual_result == opRes) {
-                success = 1;
-            }
-
-        }
-
-        else if(opName == "convexhull") {
-            geom::Geometry* p_gT = gA;
-            if((opArg1 == "B" || opArg1 == "b") && gB) {
-                p_gT = gB;
-            }
-
-            GeomPtr gRes(parseGeometry(opRes, "expected"));
-            gRes->normalize();
-
-            GeomPtr gRealRes(p_gT->convexHull());
-            gRealRes->normalize();
-
-            if(gRes->compareTo(gRealRes.get()) == 0) {
-                success = 1;
-            }
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-
-            if(testValidOutput) {
-                success &= int(testValid(gRealRes.get(), "result"));
-            }
-        }
-
-        else if(opName == "buffer") {
-            using namespace operation::buffer;
-
-            geom::Geometry* p_gT = gA;
-            if((opArg1 == "B" || opArg1 == "b") && gB) {
-                p_gT = gB;
-            }
-
-            GeomPtr gRes(parseGeometry(opRes, "expected"));
-            gRes->normalize();
-
-            profile.start();
-
-            GeomPtr gRealRes;
-            double dist = std::atof(opArg2.c_str());
-
-            BufferParameters params;
-            if(opArg3 != "") {
-                params.setQuadrantSegments(std::atoi(opArg3.c_str()));
-            }
-
-
-            BufferOp op(p_gT, params);
-            gRealRes = op.getResultGeometry(dist);
-
-            profile.stop();
-            gRealRes->normalize();
-
-            // Validate the buffer operation
-            success = checkBufferSuccess(*gRes, *gRealRes, dist);
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-
-            if(testValidOutput) {
-                success &= int(testValid(gRealRes.get(), "result"));
-            }
-        }
-
-        else if(opName == "buffersinglesided") {
-            using namespace operation::buffer;
-
-            geom::Geometry* p_gT = gA;
-            if((opArg1 == "B" || opArg1 == "b") && gB) {
-                p_gT = gB;
-            }
-
-            GeomPtr gRes(parseGeometry(opRes, "expected"));
-            gRes->normalize();
-
-            profile.start();
-
-            GeomPtr gRealRes;
-            double dist = std::atof(opArg2.c_str());
-
-            BufferParameters params ;
-            params.setJoinStyle(BufferParameters::JOIN_ROUND) ;
-            if(opArg3 != "") {
-                params.setQuadrantSegments(std::atoi(opArg3.c_str()));
-            }
-
-            bool leftSide = true ;
-            if(opArg4 == "right") {
-                leftSide = false ;
-            }
-
-            BufferBuilder bufBuilder(params) ;
-            gRealRes = bufBuilder.bufferLineSingleSided(p_gT, dist, leftSide);
-
-            profile.stop();
-            gRealRes->normalize();
-
-            // Validate the single sided buffer operation
-            success = checkSingleSidedBufferSuccess(*gRes,
-                                                    *gRealRes, dist);
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-
-            if(testValidOutput) {
-                success &= int(testValid(gRealRes.get(), "result"));
-            }
-        }
-
-        else if(opName == "buffermitredjoin") {
-            using namespace operation::buffer;
-
-            geom::Geometry* p_gT = gA;
-            if((opArg1 == "B" || opArg1 == "b") && gB) {
-                p_gT = gB;
-            }
-
-            GeomPtr gRes(parseGeometry(opRes, "expected"));
-            gRes->normalize();
-
-            profile.start();
-
-            GeomPtr gRealRes;
-            double dist = std::atof(opArg2.c_str());
-
-            BufferParameters params;
-            params.setJoinStyle(BufferParameters::JOIN_MITRE);
-
-            if(opArg3 != "") {
-                params.setQuadrantSegments(std::atoi(opArg3.c_str()));
-            }
-
-            BufferOp op(p_gT, params);
-            gRealRes = op.getResultGeometry(dist);
-
-            profile.stop();
-            gRealRes->normalize();
-
-            // Validate the buffer operation
-            success = checkBufferSuccess(*gRes, *gRealRes, dist);
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-
-            if(testValidOutput) {
-                success &= int(testValid(gRealRes.get(), "result"));
-            }
-        }
-
-
-        else if(opName == "getinteriorpoint") {
-            geom::Geometry* p_gT = gA;
-            if((opArg1 == "B" || opArg1 == "b") && gB) {
-                p_gT = gB;
-            }
-
-            GeomPtr gRes(parseGeometry(opRes, "expected"));
-            gRes->normalize();
-
-            GeomPtr gRealRes(p_gT->getInteriorPoint());
-            if(gRealRes.get()) {
-                gRealRes->normalize();
-            }
-            else {
-                gRealRes = factory->createPoint();
-            }
-
-            if(gRes->compareTo(gRealRes.get()) == 0) {
-                success = 1;
-            }
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-
-            if(testValidOutput) {
-                success &= int(testValid(gRealRes.get(), "result"));
-            }
-        }
-
-        else if(opName == "iswithindistance") {
-            double dist = std::atof(opArg3.c_str());
-            if(gA->isWithinDistance(gB, dist)) {
-                actual_result = "true";
-            }
-            else {
-                actual_result = "false";
-            }
-
-            if(actual_result == opRes) {
-                success = 1;
-            }
-
-        }
-
-        else if(opName == "polygonize") {
-
-            GeomPtr gRes(wktreader->read(opRes));
-            gRes->normalize();
-
-            Polygonizer plgnzr;
-            plgnzr.add(gA);
-
-
-            auto polys = plgnzr.getPolygons();
-            GeomPtr gRealRes(factory->createGeometryCollection(std::move(polys)));
-            gRealRes->normalize();
-
-
-            if(gRes->compareTo(gRealRes.get()) == 0) {
-                success = 1;
-            }
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-
-            if(testValidOutput) {
-                success &= int(testValid(gRealRes.get(), "result"));
-            }
-        }
-
-        else if(opName == "linemerge") {
-            GeomPtr gRes(wktreader->read(opRes));
-            gRes->normalize();
-
-            geom::Geometry* p_gT = gA;
-
-            if((opArg1 == "B" || opArg1 == "b") && gB) {
-                p_gT = gB;
-            }
-
-            LineMerger merger;
-            merger.add(p_gT);
-            auto lines = merger.getMergedLineStrings();
-
-            GeomPtr gRealRes(factory->createGeometryCollection(std::move(lines)));
-            gRealRes->normalize();
-
-            if(gRes->compareTo(gRealRes.get()) == 0) {
-                success = 1;
-            }
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-
-            if(testValidOutput) {
-                success &= int(testValid(gRealRes.get(), "result"));
-            }
-        }
-
-        else if(opName == "overlayareatest") {
-
-            std::string maxDiffOp;
-            std::stringstream p_tmp;
-            double maxDiff = 1e-6;
-            double areaDiff = areaDelta(gA, gB, maxDiffOp, maxDiff, p_tmp);
-
-            // Debug output of actual geometries returned
-            if (areaDiff < maxDiff && false) {
-                std::cout << p_tmp.str();
-            }
-
-            p_tmp.str("");
-            p_tmp << maxDiffOp << ": " << areaDiff;
-            actual_result = p_tmp.str();
-            p_tmp.str("");
-            p_tmp << maxDiff;
-            expected_result = p_tmp.str();
-
-            if (areaDiff < maxDiff)
-                success = 1;
-        }
-
-        else if(opName == "unionlength") {
-
-            char* rest;
-            GeomPtr result = OverlayNGRobust::Union(gA);
-            double resultLength = result->getLength();
-            double expectedLength = std::strtod(opRes.c_str(), &rest);
-            if(rest == opRes.c_str()) {
-                throw std::runtime_error("malformed testcase: missing expected length 'unionlength' op");
-            }
-
-            std::stringstream ss;
-            ss << resultLength;
-            actual_result = ss.str();
-
-            if (std::abs(expectedLength-resultLength) / expectedLength < 1e-3) {
-                success = 1;
-            }
-
-        }
-
-        else if(opName == "unionarea") {
-
-            char* rest;
-            GeomPtr result = OverlayNGRobust::Union(gA);
-            double resultArea  = result->getArea();
-            double expectedArea = std::strtod(opRes.c_str(), &rest);
-            if(rest == opRes.c_str()) {
-                throw std::runtime_error("malformed testcase: missing expected area 'unionarea' op");
-            }
-
-            std::stringstream ss;
-            ss << resultArea;
-            actual_result = ss.str();
-
-            if (std::abs(expectedArea-resultArea) / expectedArea < 1e-3) {
-                success = 1;
-            }
-
-        }
-
-        else if(opName == "areatest") {
-            char* rest;
-            double toleratedDiff = std::strtod(opRes.c_str(), &rest);
-            int validOut = 1;
-
-            if(rest == opRes.c_str()) {
-                throw std::runtime_error("malformed testcase: missing tolerated area difference in 'areatest' op");
-            }
-
-            if(verbose > 1) {
-                std::cerr << "Running intersection for areatest" << std::endl;
-            }
-            GeomPtr gI(gA->intersection(gB));
-
-            if(testValidOutput) {
-                validOut &= int(testValid(gI.get(), "areatest intersection"));
-            }
-
-            if(verbose > 1) {
-                std::cerr << "Running difference(A,B) for areatest" << std::endl;
-            }
-
-            GeomPtr gDab(gA->difference(gB));
-
-            if(testValidOutput) {
-                validOut &= int(testValid(gI.get(), "areatest difference(a,b)"));
-            }
-
-            if(verbose > 1) {
-                std::cerr << "Running difference(B,A) for areatest" << std::endl;
-            }
-
-            GeomPtr gDba(gB->difference(gA));
-
-            if(testValidOutput) {
-                validOut &= int(testValid(gI.get(), "areatest difference(b,a)"));
-            }
-
-            if(verbose > 1) {
-                std::cerr << "Running symdifference for areatest" << std::endl;
-            }
-
-            GeomPtr gSD(gA->symDifference(gB));
-
-            if(testValidOutput) {
-                validOut &= int(testValid(gI.get(), "areatest symdifference"));
-            }
-
-            if(verbose > 1) {
-                std::cerr << "Running union for areatest" << std::endl;
-            }
-
-            GeomPtr gU(gA->Union(gB));
-
-            double areaA = gA->getArea();
-            double areaB = gB->getArea();
-            double areaI = gI->getArea();
-            double areaDab = gDab->getArea();
-            double areaDba = gDba->getArea();
-            double areaSD = gSD->getArea();
-            double areaU = gU->getArea();
-
-            double maxdiff = 0;
-            std::string maxdiffop;
-
-            // @ : symdifference
-            // - : difference
-            // + : union
-            // ^ : intersection
-
-            // A == ( A ^ B ) + ( A - B )
-            double diff = std::fabs(areaA - areaI - areaDab);
-            if(diff > maxdiff) {
-                maxdiffop = "A == ( A ^ B ) + ( A - B )";
-                maxdiff = diff;
-            }
-
-            // B == ( A ^ B ) + ( B - A )
-            diff = std::fabs(areaB - areaI - areaDba);
-            if(diff > maxdiff) {
-                maxdiffop = "B == ( A ^ B ) + ( B - A )";
-                maxdiff = diff;
-            }
-
-            //  ( A @ B ) == ( A - B ) + ( B - A )
-            diff = std::fabs(areaDab + areaDba - areaSD);
-            if(diff > maxdiff) {
-                maxdiffop = "( A @ B ) == ( A - B ) + ( B - A )";
-                maxdiff = diff;
-            }
-
-            //  ( A u B ) == ( A ^ B ) + ( A @ B )
-            diff = std::fabs(areaI + areaSD - areaU);
-            if(diff > maxdiff) {
-                maxdiffop = "( A u B ) == ( A ^ B ) + ( A @ B )";
-                maxdiff = diff;
-            }
-
-            if(maxdiff <= toleratedDiff) {
-                success = 1 && validOut;
-            }
-
-            std::stringstream p_tmp;
-            p_tmp << maxdiffop << ": " << maxdiff;
-            actual_result = p_tmp.str();
-            expected_result = opRes;
-
-        }
-        else if(opName == "distance") {
-            char* rest;
-            double distE = std::strtod(opRes.c_str(), &rest);
-            if(rest == opRes.c_str()) {
-                throw std::runtime_error("malformed testcase: missing expected result in 'distance' op");
-            }
-
-            geom::Geometry* g1 = opArg1 == "B" ? gB : gA;
-            geom::Geometry* g2 = opArg2 == "B" ? gB : gA;
-            double distO = g1->distance(g2);
-            std::stringstream ss;
-            ss << distO;
-            actual_result = ss.str();
-
-            // TODO: Use a tolerance ?
-            success = (distO == distE) ? 1 : 0;
-        }
-        else if(opName == "minclearance") {
-            char* rest;
-            double minclearanceE = std::strtod(opRes.c_str(), &rest);
-            if(rest == opRes.c_str()) {
-                throw std::runtime_error("malformed testcase: missing expected result in 'minclearance' op");
-            }
-
-            geom::Geometry* g1 = opArg1 == "B" ? gB : gA;
-            precision::MinimumClearance mc(g1);
-
-            double minclearanceO = mc.getDistance();
-            std::stringstream ss;
-            ss << minclearanceO;
-            actual_result = ss.str();
-
-            // Hack for Inf/1.7976931348623157E308 comparison
-            if(minclearanceO > 1.7976931348623157E308) {
-                minclearanceO = 1.7976931348623157E308;
-            }
-
-            // TODO: Use a tolerance ?
-            success = (minclearanceO == minclearanceE) ? 1 : 0;
-        }
-        else if(opName == "minclearanceline") {
-
-            double tol = 0.0000001;
-            GeomPtr lineE(parseGeometry(opRes, "expected"));
-            if(!lineE) {
-                throw std::runtime_error("malformed testcase: missing expected result in 'minclearanceline' op");
-            }
-
-            geom::Geometry* g1 = opArg1 == "B" ? gB : gA;
-            precision::MinimumClearance mc(g1);
-            std::unique_ptr<geom::Geometry> lineO = mc.getLine();
-            lineO.get()->normalize();
-            lineE.get()->normalize();
-
-            actual_result = printGeom(lineO.get());
-            success = lineE.get()->equalsExact(lineO.get(), tol) ? 1 : 0;
-        }
-
-        else if (opName == "buildarea")
-        {
-            GeomPtr gExpected(parseGeometry(opRes, "expected"));
-            gExpected->normalize();
-
-            auto gGot = BuildArea().build(gA);
-            if( gGot )
-            {
-                GeomPtr gRealRes(gGot.release());
-                gRealRes->normalize();
-
-                if (gExpected->equals(gRealRes.get())) success=1;
-
-                actual_result=printGeom(gRealRes.get());
-                expected_result=printGeom(gExpected.get());
-                if( actual_result == expected_result ) success=1;
-
-                if ( testValidOutput )
-                    success &= int(testValid(gRealRes.get(), "result"));
-            }
-            else
-            {
-                success = false;
-            }
-        }
-
-        else if (opName == "makevalid")
-        {
-            GeomPtr gExpected(parseGeometry(opRes, "expected"));
-            gExpected->normalize();
-
-            auto gGot = geos::operation::valid::MakeValid().build(gA);
-            if( gGot )
-            {
-                GeomPtr gRealRes(gGot.release());
-                gRealRes->normalize();
-
-                if (gExpected->equals(gRealRes.get())) success=1;
-
-                actual_result=printGeom(gRealRes.get());
-                expected_result=printGeom(gExpected.get());
-                if( actual_result == expected_result ) success=1;
-
-                if ( testValidOutput )
-                    success &= int(testValid(gRealRes.get(), "result"));
-            }
-            else
-            {
-                success = false;
-            }
-        }
-
-        else if(opName == "simplifydp" || opName == "simplifytp")
-        {
-            geom::Geometry* p_gT = gA;
-            if((opArg1 == "B" || opArg1 == "b") && gB) {
-                p_gT = gB;
-            }
-
-            GeomPtr gRes(parseGeometry(opRes, "expected"));
-            gRes->normalize();
-
-            profile.start();
-
-            GeomPtr gRealRes;
-            double tolerance = std::atof(opArg2.c_str());
-
-            if (opName == "simplifydp") {
-                gRealRes = geos::simplify::DouglasPeuckerSimplifier::simplify(p_gT, tolerance);
-            }
-            else {
-                gRealRes = geos::simplify::TopologyPreservingSimplifier::simplify(p_gT, tolerance);
-            }
-
-            profile.stop();
-            gRealRes->normalize();
-
-            actual_result = printGeom(gRealRes.get());
-            expected_result = printGeom(gRes.get());
-
-            success = gRealRes.get()->equalsExact(gRes.get(), 0.000001) ? 1 : 0;
-
-            if(testValidOutput) {
-                success &= int(testValid(gRealRes.get(), "result"));
-            }
-        }
-
-        else {
-            std::cerr << *curr_file << ":";
-            std::cerr << " case" << caseCount << ":";
-            std::cerr << " test" << testCount << ": "
-                      << opName << "(" << opSig << ")";
-            std::cerr << ": skipped (unrecognized)." << std::endl;
-            return;
-        }
-
+        executeOp(geomA, geomB);
     }
     catch(const std::exception& e) {
-        if (expected_result == "exception") {
-            success = true;
-            actual_result = "exception";
+        if (opResult == "exception") {
+            isSuccess = true;
+            actualResultStr = "exception";
         }
         else {
-            std::cerr << "EXCEPTION on case " << caseCount
-                      << " test " << testCount << ": " << e.what()
+            std::cerr << "EXCEPTION in " << tester.testcaseRef() << ": " << e.what()
                       << std::endl;
-            actual_result = e.what();
+            actualResultStr = e.what();
         }
     }
     catch(...) {
-        std::cerr << "Unknown EXCEPTION on case "
-                  << caseCount
+        std::cerr << "Unknown EXCEPTION in "
+                  << tester.testcaseRef()
                   << std::endl;
-        actual_result = "Unknown exception thrown";
+        actualResultStr = "Unknown exception thrown";
     }
+}
 
-    if(success) {
-        ++succeeded;
+void Test::executeOp(Geometry* gA, Geometry* gB)
+{        
+    if(opName == "relate") {
+        std::unique_ptr<geom::IntersectionMatrix> im(gA->relate(gB));
+        checkResult( im->matches(opArg3) );
+    }
+    else if(opName == "isvalid") {
+        checkResult( gA->isValid() );
+    }
+    else if(opName == "intersection" || opName == "intersectionng"
+            //TODO: remove this opname by fixing test
+            || opName == "intersectionsin") {
+        checkResult( *(gA->intersection(gB)) );
+    }
+    //-- in current GEOS all overlay is OverlayNG
+    else if(opName == "union"|| opName == "unionng") {
+        if (gB) {
+            checkUnionResult( *gA->Union(gB) );
+        }
+        else {
+            checkUnionResult( *gA->Union() );
+        }
+    }
+    else if(opName == "difference" || opName == "differenceng") {
+        checkResult( *gA->difference(gB) );
+    }
+    else if(opName == "symdifference" || opName == "symdifferenceng") {
+        checkResult( *gA->symDifference(gB) );
+    }
+    else if(opName == "intersectionsr") {
+        double precision = 1.0;
+        if(opArg3 != "") {
+            precision = std::atof(opArg3.c_str());
+        }
+        geom::PrecisionModel precMod(precision);
+        std::unique_ptr<Geometry> res = OverlayNG::overlay(gA, gB, OverlayNG::INTERSECTION, &precMod);
+        checkResult( *res );
+    }
+    else if(opName == "unionsr") {
+        double precision = 1.0;
+        std::unique_ptr<Geometry> res;
+        if (gB) {
+            geom::PrecisionModel precMod(precision);
+            if(opArg3 != "") {
+                precision = std::atof(opArg3.c_str());
+            }
+            res = OverlayNG::overlay(gA, gB, OverlayNG::UNION, &precMod);
+        }
+        else {
+            if(opArg2 != "") {
+                precision = std::atof(opArg2.c_str());
+            }
+            geom::PrecisionModel precMod(precision);
+            // gRealRes = OverlayNG::geomunion(gA, &precMod);
+            res = UnaryUnionNG::Union(gA, precMod);
+        }
+        checkResult( *res );
+    }
+    else if(opName == "differencesr") {
+        double precision = 1.0;
+        if(opArg3 != "") {
+            precision = std::atof(opArg3.c_str());
+        }
+        geom::PrecisionModel precMod(precision);
+        std::unique_ptr<Geometry> res = OverlayNG::overlay(gA, gB, OverlayNG::DIFFERENCE, &precMod);
+        checkResult( *res );
+    }
+    else if(opName == "symdifferencesr") {
+        double precision = 1.0;
+        if(opArg3 != "") {
+            precision = std::atof(opArg3.c_str());
+        }
+        geom::PrecisionModel precMod(precision);
+        std::unique_ptr<Geometry> res = OverlayNG::overlay(gA, gB, OverlayNG::SYMDIFFERENCE, &precMod);
+        checkResult( *res );
+    }
+    else if(opName == "densify") {
+        double distanceTolerance = std::atof(opArg2.c_str());
+        geom::util::Densifier den(gA);
+        den.setDistanceTolerance(distanceTolerance);
+        checkResult( *den.getResultGeometry() );
+    }
+    else if(opName == "intersects") {
+        bool res = tester.isPrepared() ? prepare(gA)->intersects(gB) : gA->intersects(gB);
+        checkResult( res );
+    }
+    else if(opName == "contains") {
+        bool res = tester.isPrepared() ? prepare(gA)->contains(gB) : gA->contains(gB);
+        checkResult( res );
+    }
+    else if(opName == "overlaps") {
+        bool res = tester.isPrepared() ? prepare(gA)->overlaps(gB) : gA->overlaps(gB);
+        checkResult( res );
+    }
+    else if(opName == "within") {
+        bool res = tester.isPrepared() ? prepare(gA)->within(gB) : gA->within(gB);
+        checkResult( res );
+    }
+    else if(opName == "touches") {
+        bool res = tester.isPrepared() ? prepare(gA)->touches(gB) : gA->touches(gB);
+        checkResult( res );
+    }
+    else if(opName == "crosses") {
+        bool res = tester.isPrepared() ? prepare(gA)->crosses(gB) : gA->crosses(gB);
+        checkResult( res );
+    }
+    else if(opName == "disjoint") {
+        bool res = tester.isPrepared() ? prepare(gA)->disjoint(gB) : gA->disjoint(gB);
+        checkResult( res );
+    }
+    else if(opName == "covers") {
+        bool res = tester.isPrepared() ? prepare(gA)->covers(gB) : gA->covers(gB);
+        checkResult( res );
+    }
+    else if(opName == "coveredby") {
+        bool res = tester.isPrepared() ? prepare(gA)->coveredBy(gB) : gA->coveredBy(gB);
+        checkResult( res );
+    }
+    else if(opName == "equalstopo") {
+        // equalsTopo() is synonym for equals() in JTS
+        checkResult( gA->equals(gB));
+    }
+    else if(opName == "equalsexact") {
+        checkResult( gA->equalsExact(gB));
+    }
+    else if(opName == "equalsnorm") {
+        // rather than implementing equalsnorm in the library,
+        // we just do it in this one test case for now
+        // NOTE: mutates A and B !!!!
+        gA->normalize();
+        gB->normalize();
+        checkResult( gA->equalsExact(gB));
+    }
+    else if(opName == "getboundary") {
+        checkResult( *gA->getBoundary() );
+    }
+    else if(opName == "getcentroid") {
+        checkResult( *gA->getCentroid() );
+    }
+    else if(opName == "issimple") {
+        checkResult( gA->isSimple() );
+   }
+    else if(opName == "convexhull") {
+        checkResult( *gA->convexHull() );
+    }
+    else if(opName == "buffer") {
+        double dist = std::atof(opArg2.c_str());
+
+        operation::buffer::BufferParameters params;
+        if(opArg3 != "") {
+            params.setQuadrantSegments(std::atoi(opArg3.c_str()));
+        }
+        operation::buffer::BufferOp op(gA, params);
+        std::unique_ptr<Geometry> result = op.getResultGeometry(dist);
+        checkResult( *result, 
+            [dist](Geometry& expected, Geometry& actual) -> bool {
+                return checkBufferSuccess(expected, actual, dist);
+            });
+    }
+    else if(opName == "buffermitredjoin") {
+        double dist = std::atof(opArg2.c_str());
+
+        operation::buffer::BufferParameters params;
+        params.setJoinStyle(operation::buffer::BufferParameters::JOIN_MITRE);
+        if(opArg3 != "") {
+            params.setQuadrantSegments(std::atoi(opArg3.c_str()));
+        }
+        operation::buffer::BufferOp op(gA, params);
+        std::unique_ptr<Geometry> result = op.getResultGeometry(dist);
+
+        checkResult( *result, 
+            [dist](Geometry& expected, Geometry& actual) -> bool {
+                return checkBufferSuccess(expected, actual, dist);
+            });
+    }
+    else if(opName == "buffersinglesided") {
+        double dist = std::atof(opArg2.c_str());
+
+        operation::buffer::BufferParameters params;
+        params.setJoinStyle(operation::buffer::BufferParameters::JOIN_ROUND);
+        if(opArg3 != "") {
+            params.setQuadrantSegments(std::atoi(opArg3.c_str()));
+        }
+        bool leftSide = true ;
+        if(opArg4 == "right") {
+            leftSide = false ;
+        }
+        operation::buffer::BufferBuilder bufBuilder(params) ;
+        std::unique_ptr<Geometry> result = bufBuilder.bufferLineSingleSided(gA, dist, leftSide);
+        checkResult( *result, 
+            [dist](Geometry& expected, Geometry& actual) -> bool {
+                return checkSingleSidedBufferSuccess(expected, actual, dist);
+            });
+    }
+    else if(opName == "getinteriorpoint") {
+        //-- may return null
+        std::unique_ptr<Geometry> res(gA->getInteriorPoint());
+        if (! res.get()) {
+            res = tester.getFactory()->createPoint();
+        }
+        checkResult( *res );
+    }
+    else if(opName == "iswithindistance") {
+        double dist = std::atof(opArg3.c_str());
+        checkResult( gA->isWithinDistance(gB, dist) );
+    }
+    else if(opName == "polygonize") {
+        Polygonizer plgnzr;
+        plgnzr.add(gA);
+        auto polys = plgnzr.getPolygons();
+        std::unique_ptr<Geometry> res(tester.getFactory()->createGeometryCollection(std::move(polys)));
+        checkResult( *res );
+    }
+    else if(opName == "linemerge") {
+        LineMerger merger;
+        merger.add(gA);
+        auto lines = merger.getMergedLineStrings();
+        std::unique_ptr<Geometry> res(tester.getFactory()->createGeometryCollection(std::move(lines)));
+        checkResult( *res );
+    }
+    else if(opName == "overlayareatest") {
+        std::string maxDiffOp;
+        std::stringstream p_tmp;
+        double maxDiff = 1e-6;
+        double areaDiff = areaDelta(gA, gB, maxDiffOp, maxDiff, p_tmp);
+        
+        // Debug output of actual geometries returned
+        if (areaDiff < maxDiff && false) {
+            std::cout << p_tmp.str();
+        }
+        checkResult(areaDiff < maxDiff);
+    }
+    else if(opName == "unionlength") {
+        checkResult( OverlayNGRobust::Union(gA)->getLength() );
+    }
+    else if(opName == "unionarea") {
+        checkResult( OverlayNGRobust::Union(gA)->getArea() );
+    }
+    else if(opName == "areatest") {
+        char* rest;
+        double toleratedDiff = std::strtod(opResult.c_str(), &rest);
+        bool validOut = true;
+
+        if(rest == opResult.c_str()) {
+            throw std::runtime_error("malformed testcase: missing tolerated area difference in 'areatest' op");
+        }
+
+        std::unique_ptr<Geometry> gI(gA->intersection(gB));
+        if(testValidOutput) {
+            validOut &= tester.testValid(gI.get(), "areatest intersection");
+        }
+
+        std::unique_ptr<Geometry> gDab(gA->difference(gB));
+        if(testValidOutput) {
+            validOut &= tester.testValid(gI.get(), "areatest difference(a,b)");
+        }
+
+        std::unique_ptr<Geometry> gDba(gB->difference(gA));
+        if(testValidOutput) {
+            validOut &= tester.testValid(gI.get(), "areatest difference(b,a)");
+        }
+
+        std::unique_ptr<Geometry> gSD(gA->symDifference(gB));
+        if(testValidOutput) {
+            validOut &= tester.testValid(gI.get(), "areatest symdifference");
+        }
+
+        std::unique_ptr<Geometry> gU(gA->Union(gB));
+
+        double areaA = gA->getArea();
+        double areaB = gB->getArea();
+        double areaI = gI->getArea();
+        double areaDab = gDab->getArea();
+        double areaDba = gDba->getArea();
+        double areaSD = gSD->getArea();
+        double areaU = gU->getArea();
+
+        double maxdiff = 0;
+        std::string maxdiffop;
+
+        // @ : symdifference
+        // - : difference
+        // + : union
+        // ^ : intersection
+
+        // A == ( A ^ B ) + ( A - B )
+        double diff = std::fabs(areaA - areaI - areaDab);
+        if(diff > maxdiff) {
+            maxdiffop = "A == ( A ^ B ) + ( A - B )";
+            maxdiff = diff;
+        }
+
+        // B == ( A ^ B ) + ( B - A )
+        diff = std::fabs(areaB - areaI - areaDba);
+        if(diff > maxdiff) {
+            maxdiffop = "B == ( A ^ B ) + ( B - A )";
+            maxdiff = diff;
+        }
+
+        //  ( A @ B ) == ( A - B ) + ( B - A )
+        diff = std::fabs(areaDab + areaDba - areaSD);
+        if(diff > maxdiff) {
+            maxdiffop = "( A @ B ) == ( A - B ) + ( B - A )";
+            maxdiff = diff;
+        }
+
+        //  ( A u B ) == ( A ^ B ) + ( A @ B )
+        diff = std::fabs(areaI + areaSD - areaU);
+        if(diff > maxdiff) {
+            maxdiffop = "( A u B ) == ( A ^ B ) + ( A @ B )";
+            maxdiff = diff;
+        }
+
+        if(maxdiff <= toleratedDiff) {
+            isSuccess = validOut;
+        }
+
+        std::stringstream p_tmp;
+        p_tmp << maxdiffop << ": " << maxdiff;
+        actualResultStr = p_tmp.str();
+    }
+    else if(opName == "distance") {
+        checkResult( gA->distance(gB) );
+    }
+    else if(opName == "minclearance") {
+        precision::MinimumClearance mc(gA);
+        double minclearanceO = mc.getDistance();
+        // Hack for Inf/1.7976931348623157E308 comparison
+        if(minclearanceO > 1.7976931348623157E308) {
+            minclearanceO = 1.7976931348623157E308;
+        }
+        checkResult( minclearanceO );
+    }
+    else if(opName == "minclearanceline") {
+        precision::MinimumClearance mc(gA);
+        //TODO: could use a checkResult with a tolerance?
+        checkResult( *mc.getLine() );
+    }
+    else if (opName == "buildarea")
+    {
+        checkResult( *BuildArea().build(gA) );
+    }
+    else if (opName == "makevalid")
+    {
+        checkResult( *geos::operation::valid::MakeValid().build(gA) );
+    }
+    else if(opName == "simplifydp")
+    {
+        double tolerance = std::atof(opArg2.c_str());
+        checkResult( *geos::simplify::DouglasPeuckerSimplifier::simplify(gA, tolerance) );
+    }
+    else if(opName == "simplifytp")
+    {
+        double tolerance = std::atof(opArg2.c_str());
+        checkResult( *geos::simplify::TopologyPreservingSimplifier::simplify(gA, tolerance) );
     }
     else {
-        ++failed;
+        //TODO: error out here?
+        std::cerr << tester.testcaseRef() << " - " << opName;
+        std::cerr << ": skipped (unrecognized)." << std::endl;
     }
-
-    if((!success && verbose) || verbose > 0) {
-        printTest(!!success, expected_result, actual_result, profile);
-    }
-
-    if(test_predicates && gB && gA) {
-        runPredicates(gA, gB);
-    }
-
 }
 
-void
-XMLTester::runPredicates(const geom::Geometry* p_gA, const geom::Geometry* p_gB)
-{
-    std::cout << "\t    Equals:\tAB=" << (p_gA->equals(p_gB) ? "T" : "F") << ", BA=" << (p_gB->equals(
-                  p_gA) ? "T" : "F") << std::endl;
-    std::cout << "\t  Disjoint:\tAB=" << (p_gA->disjoint(p_gB) ? "T" : "F") << ", BA=" << (p_gB->disjoint(
-                  p_gA) ? "T" : "F") << std::endl;
-    std::cout << "\tIntersects:\tAB=" << (p_gA->intersects(p_gB) ? "T" : "F") << ", BA=" << (p_gB->intersects(
-                  p_gA) ? "T" : "F") << std::endl;
-    std::cout << "\t   Touches:\tAB=" << (p_gA->touches(p_gB) ? "T" : "F") << ", BA=" << (p_gB->touches(
-                  p_gA) ? "T" : "F") << std::endl;
-    std::cout << "\t   Crosses:\tAB=" << (p_gA->crosses(p_gB) ? "T" : "F") << ", BA=" << (p_gB->crosses(
-                  p_gA) ? "T" : "F") << std::endl;
-    std::cout << "\t    Within:\tAB=" << (p_gA->within(p_gB) ? "T" : "F") << ", BA=" << (p_gB->within(
-                  p_gA) ? "T" : "F") << std::endl;
-    std::cout << "\t  Contains:\tAB=" << (p_gA->contains(p_gB) ? "T" : "F") << ", BA=" << (p_gB->contains(
-                  p_gA) ? "T" : "F") << std::endl;
-    std::cout << "\t  Overlaps:\tAB=" << (p_gA->overlaps(p_gB) ? "T" : "F") << ", BA=" << (p_gB->overlaps(
-                  p_gA) ? "T" : "F") << std::endl;
-
-    std::cout << "\t  Prepared Disjoint:\tAB=" << (prepare(p_gA)->disjoint(p_gB) ? "T" : "F") << ", BA=" << (prepare(
-                  p_gB)->disjoint(p_gA) ? "T" : "F") << std::endl;
-    std::cout << "\tPrepared Intersects:\tAB=" << (prepare(p_gA)->intersects(p_gB) ? "T" : "F") << ", BA=" << (prepare(
-                  p_gB)->intersects(p_gA) ? "T" : "F") << std::endl;
-    std::cout << "\t   Prepared Touches:\tAB=" << (prepare(p_gA)->touches(p_gB) ? "T" : "F") << ", BA=" << (prepare(
-                  p_gB)->touches(p_gA) ? "T" : "F") << std::endl;
-    std::cout << "\t   Prepared Crosses:\tAB=" << (prepare(p_gA)->crosses(p_gB) ? "T" : "F") << ", BA=" << (prepare(
-                  p_gB)->crosses(p_gA) ? "T" : "F") << std::endl;
-    std::cout << "\t    Prepared Within:\tAB=" << (prepare(p_gA)->within(p_gB) ? "T" : "F") << ", BA=" << (prepare(
-                  p_gB)->within(p_gA) ? "T" : "F") << std::endl;
-    std::cout << "\t  Prepared Contains:\tAB=" << (prepare(p_gA)->contains(p_gB) ? "T" : "F") << ", BA=" << (prepare(
-                  p_gB)->contains(p_gA) ? "T" : "F") << std::endl;
-    std::cout << "\t Prepared Overlaps:\tAB=" << (prepare(p_gA)->overlaps(p_gB) ? "T" : "F") << ", BA=" << (prepare(
-                  p_gB)->overlaps(p_gA) ? "T" : "F") << std::endl;
-}
-
-XMLTester::~XMLTester()
-{
-}
-
+//==================================================================================
 
 static void
 usage(char* me, int exitcode, std::ostream& os)
@@ -2385,7 +1444,7 @@ main(int argC, char* argV[])
                 continue;
             }
             if(! std::strcmp(argV[i], "--test-valid-output")) {
-                tester.testOutputValidity(true);
+                tester.setTestOutputValidity(true);
                 continue;
             }
             if(! std::strcmp(argV[i], "--sql-output")) {
@@ -2399,7 +1458,7 @@ main(int argC, char* argV[])
                 continue;
             }
             if(! std::strcmp(argV[i], "--test-valid-input")) {
-                tester.testInputValidity(true);
+                tester.setTestInputValidity(true);
                 continue;
             }
 
@@ -2428,39 +1487,5 @@ main(int argC, char* argV[])
     }
     DeInitAllocCheck();
 #endif
-
 }
 
-/**********************************************************************
- * $Log: XMLTester.cpp,v $
- * Revision 1.38  2006/07/13 03:59:10  csavage
- * Changes to compile on VC++ - fully qualified polygon name.  Should also work on MingW, will test next.
- *
- * Revision 1.37  2006/06/19 20:48:35  strk
- * parseCase(): make sure to exit the <case> tag before returning
- *
- * Revision 1.36  2006/06/14 19:19:10  strk
- * Added support for "AreaTest" operations.
- *
- * Revision 1.35  2006/06/12 10:39:29  strk
- * don't print test file precision model if verbosity level < 2.
- *
- * Revision 1.34  2006/06/05 15:36:34  strk
- * Given OverlayOp funx code enum a name and renamed values to have a lowercase prefix. Drop all of noding headers from installed header set.
- *
- * Revision 1.33  2006/05/19 16:38:22  strk
- *         * tests/xmltester/XMLTester.cpp: report
- *         error on load of requested tests.
- *
- * Revision 1.32  2006/04/14 14:57:15  strk
- * XMLTester binary ops invoked using the new HeuristicOverlay template function.
- *
- * Revision 1.31  2006/04/07 13:26:38  strk
- * Use of unique_ptr<> to prevent confusing leaks in tester
- *
- * Revision 1.30  2006/03/22 16:01:33  strk
- * indexBintree.h header split, classes renamed to match JTS
- *
- * Revision 1.29  2006/03/17 14:56:39  strk
- * Fixed filename normalizer for sql output
- **********************************************************************/
